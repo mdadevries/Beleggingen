@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+/* Design tokens — rustige, moderne stijl met veel wit. Kleuren volgen de
+   gevalideerde dataviz-palette (WCAG AA-contrast, colorblind-safe). */
+@layer base {
+  :root {
+    --page-bg: 249 249 247; /* #f9f9f7 */
+    --surface: 255 255 255;
+    --surface-sunken: 252 252 251; /* #fcfcfb */
+    --border: 225 224 217; /* #e1e0d9 */
+    --border-strong: 195 194 183; /* #c3c2b7 */
+
+    --text-primary: 11 11 11; /* #0b0b0b */
+    --text-secondary: 82 81 78; /* #52514e */
+    --text-muted: 137 135 129; /* #898781 */
+
+    --status-good: 0 99 0; /* #006300 — tekstversie, AA op wit */
+    --status-good-bg: 12 163 12; /* #0ca30c — vlak/badge */
+    --status-critical: 208 59 59; /* #d03b3b */
+
+    --series-1: 42 120 214; /* blauw */
+    --series-2: 235 104 52; /* oranje */
+    --series-3: 27 175 122; /* aqua */
+    --series-4: 237 161 0; /* geel */
+    --series-5: 232 123 164; /* magenta */
+  }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    background-color: rgb(var(--page-bg));
+    color: rgb(var(--text-secondary));
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4 {
+    color: rgb(var(--text-primary));
+    letter-spacing: -0.01em;
+  }
+
+  /* Tabulaire cijfers voor kolommen die moeten uitlijnen (tabel, assen) */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
