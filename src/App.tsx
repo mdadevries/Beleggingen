@@ -5,7 +5,7 @@ import { AllocationBar } from './components/AllocationBar.tsx';
 import { ValueChart } from './components/ValueChart.tsx';
 import { RecentTransactions } from './components/RecentTransactions.tsx';
 import { TransactionsTable } from './components/TransactionsTable.tsx';
-import { DEMO_STOCKS, DEMO_TRANSACTIONS } from './data/demoData.ts';
+import { usePortfolioData } from './hooks/usePortfolioData.ts';
 import { computePositions, computeTotals, computeValueOverTime } from './utils/portfolio.ts';
 
 const Card: React.FC<{ title: string; subtitle?: string; children: React.ReactNode }> = ({
@@ -24,17 +24,26 @@ const Card: React.FC<{ title: string; subtitle?: string; children: React.ReactNo
 
 export default function App() {
   const [page, setPage] = useState<Page>('overzicht');
+  const { stocks, transactions, isDemo, loading } = usePortfolioData();
 
-  const positions = useMemo(() => computePositions(DEMO_STOCKS, DEMO_TRANSACTIONS), []);
+  const positions = useMemo(() => computePositions(stocks, transactions), [stocks, transactions]);
   const totals = useMemo(() => computeTotals(positions), [positions]);
-  const valuePoints = useMemo(() => computeValueOverTime(DEMO_STOCKS, DEMO_TRANSACTIONS), []);
+  const valuePoints = useMemo(() => computeValueOverTime(stocks, transactions), [stocks, transactions]);
 
   // Ingelegd bedrag alleen tonen als elke positie een betrouwbare kostenbasis heeft.
   const showInvested = positions.every((p) => p.invested > 0);
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-sm text-[rgb(var(--text-muted))]">
+        Laden…
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
-      <Nav page={page} onNavigate={setPage} />
+      <Nav page={page} onNavigate={setPage} isDemo={isDemo} />
 
       <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-5">
         {page === 'overzicht' ? (
@@ -50,7 +59,7 @@ export default function App() {
             </Card>
 
             <Card title="Laatste transacties">
-              <RecentTransactions transactions={DEMO_TRANSACTIONS} limit={5} />
+              <RecentTransactions transactions={transactions} limit={5} />
               <button
                 type="button"
                 onClick={() => setPage('transacties')}
@@ -61,14 +70,14 @@ export default function App() {
             </Card>
           </>
         ) : (
-          <Card title="Transacties" subtitle={`${DEMO_TRANSACTIONS.length} transacties in totaal`}>
-            <TransactionsTable transactions={DEMO_TRANSACTIONS} stocks={DEMO_STOCKS} />
+          <Card title="Transacties" subtitle={`${transactions.length} transacties in totaal`}>
+            <TransactionsTable transactions={transactions} stocks={stocks} />
           </Card>
         )}
       </main>
 
       <footer className="border-t border-[rgb(var(--border))] py-5 text-center text-xs text-[rgb(var(--text-muted))]">
-        Beleggingen — persoonlijk overzicht (demodata)
+        Beleggingen — persoonlijk overzicht{isDemo ? ' (demodata)' : ''}
       </footer>
     </div>
   );
