@@ -23,6 +23,42 @@
     --series-3: 27 175 122; /* aqua */
     --series-4: 237 161 0; /* geel */
     --series-5: 232 123 164; /* magenta */
+
+    /* Tekst-/linkkleur voor accenten: iets donkerder/lichter per modus zodat
+       kleine tekst AA haalt. De grafiekkleuren (series-*) blijven in beide
+       modi gelijk. */
+    --accent-text: 31 100 190; /* #1f64be, AA op wit */
+    --banner-bg: 255 251 235;
+    --banner-border: 253 230 138;
+    --banner-text: 146 64 14;
+    --chart-ring: 255 255 255; /* ring om markers = surface */
+
+    color-scheme: light;
+  }
+
+  /* Donker: wordt door useTheme / het inline script in index.html als
+     data-theme="dark" op <html> gezet (volgt het apparaat tenzij je zelf kiest). */
+  :root[data-theme='dark'] {
+    --page-bg: 15 15 17;
+    --surface: 26 26 29;
+    --surface-sunken: 34 34 38;
+    --border: 48 48 54;
+    --border-strong: 76 76 84;
+
+    --text-primary: 243 244 246;
+    --text-secondary: 196 196 202;
+    --text-muted: 150 150 158;
+
+    --status-good: 74 222 128;
+    --status-critical: 248 113 113;
+
+    --accent-text: 96 165 250;
+    --banner-bg: 44 36 14;
+    --banner-border: 110 84 24;
+    --banner-text: 252 211 77;
+    --chart-ring: 26 26 29;
+
+    color-scheme: dark;
   }
 
   body {

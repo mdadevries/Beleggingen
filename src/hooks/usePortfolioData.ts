@@ -40,6 +40,10 @@ export function usePortfolioData(): PortfolioData {
 
     fetch('/api/session')
       .then((res) => (res.ok ? res.json() : { role: 'real' }))
+      // Faalt /api/session (netwerk, geen JSON)? Behandel als gewone sessie:
+      // we vallen dan alsnog terug op demodata als er niets binnenkomt, en de
+      // pagina blijft nooit op "Laden…" hangen.
+      .catch(() => ({ role: 'real' }))
       .then((session: { role: 'real' | 'demo' | 'none' }) => {
         if (cancelled) return;
 

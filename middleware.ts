@@ -45,38 +45,59 @@ function loginPage(showError?: boolean): string {
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Beleggingen — inloggen</title>
 <style>
-  :root { color-scheme: light; }
+  :root {
+    color-scheme: light;
+    --bg: #f9f9f7; --card: #ffffff; --text: #1f2937; --sub: #71717a; --border: #e4e4e7;
+    --btn-bg: #1f2937; --btn-fg: #ffffff; --hover: #f9f9f7; --secondary: #52514e;
+    --error: #c0362c; --muted: #8a8a85; --accent: #2a78d6;
+  }
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+    --bg: #0f0f11; --card: #1a1a1d; --text: #f3f4f6; --sub: #96969e; --border: #303036;
+    --btn-bg: #f3f4f6; --btn-fg: #1a1a1d; --hover: #222226; --secondary: #c4c4ca;
+    --error: #f87171; --muted: #96969e; --accent: #60a5fa;
+  }
   body {
     margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
-    background: rgb(249 249 247); font-family: Inter, system-ui, -apple-system, sans-serif;
+    background: var(--bg); font-family: Inter, system-ui, -apple-system, sans-serif;
     padding: 16px; box-sizing: border-box;
   }
   .card {
-    background: #fff; border-radius: 16px; padding: 32px 28px; width: 100%; max-width: 360px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+    background: var(--card); border-radius: 16px; padding: 32px 28px; width: 100%; max-width: 360px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04); border: 1px solid var(--border);
   }
-  h1 { font-size: 18px; margin: 0 0 4px; color: #1f2937; }
-  p.sub { margin: 0 0 20px; font-size: 13px; color: #71717a; }
+  h1 { font-size: 18px; margin: 0 0 4px; color: var(--text); }
+  p.sub { margin: 0 0 20px; font-size: 13px; color: var(--sub); }
   input {
     width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 10px;
-    border: 1px solid #e4e4e7; font-size: 14px; margin-bottom: 12px;
+    border: 1px solid var(--border); background: var(--card); color: var(--text);
+    font-size: 14px; margin-bottom: 12px;
   }
-  input:focus-visible { outline: 2px solid #2a78d6; outline-offset: 1px; border-color: #2a78d6; }
+  input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
   button {
     width: 100%; padding: 12px; border-radius: 10px; border: none;
     font-size: 14px; font-weight: 600; cursor: pointer; min-height: 44px;
   }
-  button:focus-visible { outline: 2px solid #2a78d6; outline-offset: 2px; }
-  .btn-primary { background: #1f2937; color: #fff; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn-primary { background: var(--btn-bg); color: var(--btn-fg); }
   .btn-primary:disabled { opacity: 0.6; cursor: default; }
   .btn-secondary {
-    background: transparent; color: #52514e; border: 1px solid #e4e4e7; margin-top: 10px;
+    background: transparent; color: var(--secondary); border: 1px solid var(--border); margin-top: 10px;
   }
-  .btn-secondary:hover { background: #f9f9f7; }
-  .error { color: #c0362c; font-size: 13px; margin: 0 0 12px; min-height: 16px; }
-  .divider { display: flex; align-items: center; gap: 10px; margin: 18px 0 2px; color: #a0a09a; font-size: 12px; }
-  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: #e4e4e7; }
+  .btn-secondary:hover { background: var(--hover); }
+  .error { color: var(--error); font-size: 13px; margin: 0 0 12px; min-height: 16px; }
+  .divider { display: flex; align-items: center; gap: 10px; margin: 18px 0 2px; color: var(--muted); font-size: 12px; }
+  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 </style>
+<script>
+  (function () {
+    try {
+      var pref = localStorage.getItem('beleggingen_theme') || 'system';
+      var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    } catch (e) {}
+  })();
+</script>
 </head>
 <body>
   <div class="card">

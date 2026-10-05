@@ -44,7 +44,11 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({ positions }) => {
             )}`}
           >
             {p.allocation >= 0.08 && (
-              <span className="text-[11px] font-semibold text-white px-1 truncate hidden sm:inline">
+              <span
+                className="text-[11px] font-semibold px-1 truncate hidden sm:inline"
+                // Wit haalt op geel/aqua/roze geen leesbaar contrast: daar donkere tekst.
+                style={{ color: p.stock.colorSlot >= 3 ? '#1f2937' : '#ffffff' }}
+              >
                 {p.stock.ticker}
               </span>
             )}

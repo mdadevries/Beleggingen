@@ -15,7 +15,7 @@ const StatTile: React.FC<{
   delta?: { text: string; positive: boolean };
   icon: React.ReactNode;
 }> = ({ label, value, delta, icon }) => (
-  <div className="rounded-2xl bg-white border border-[rgb(var(--border))] p-4 sm:p-5 shadow-sm">
+  <div className="rounded-2xl bg-[rgb(var(--surface))] border border-[rgb(var(--border))] p-4 sm:p-5 shadow-sm">
     <div className="flex items-center justify-between mb-2">
       <span className="text-xs font-medium text-[rgb(var(--text-muted))]">{label}</span>
       <span className="text-[rgb(var(--text-muted))]">{icon}</span>

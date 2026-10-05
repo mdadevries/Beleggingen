@@ -43,14 +43,14 @@ export const TransactionsTable: React.FC<TransactionsTableProps> = ({ transactio
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Zoek op aandeel..."
             aria-label="Zoek op aandeelnaam of ticker"
-            className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-[rgb(var(--border))] bg-white text-sm text-[rgb(var(--text-primary))] placeholder:text-[rgb(var(--text-muted))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--series-1))]/40"
+            className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] text-sm text-[rgb(var(--text-primary))] placeholder:text-[rgb(var(--text-muted))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--series-1))]/40"
           />
         </div>
         <select
           value={tickerFilter}
           onChange={(e) => setTickerFilter(e.target.value)}
           aria-label="Filter op aandeel"
-          className="px-3 py-2.5 rounded-xl border border-[rgb(var(--border))] bg-white text-sm text-[rgb(var(--text-primary))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--series-1))]/40"
+          className="px-3 py-2.5 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] text-sm text-[rgb(var(--text-primary))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--series-1))]/40"
         >
           <option value="alle">Alle aandelen</option>
           {stocks.map((s) => (

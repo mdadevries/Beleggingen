@@ -13,7 +13,7 @@ const Card: React.FC<{ title: string; subtitle?: string; children: React.ReactNo
   subtitle,
   children,
 }) => (
-  <section className="rounded-2xl bg-white border border-[rgb(var(--border))] p-4 sm:p-5 shadow-sm">
+  <section className="rounded-2xl bg-[rgb(var(--surface))] border border-[rgb(var(--border))] p-4 sm:p-5 shadow-sm">
     <div className="mb-4">
       <h2 className="text-sm font-bold text-[rgb(var(--text-primary))]">{title}</h2>
       {subtitle && <p className="text-xs text-[rgb(var(--text-muted))] mt-0.5">{subtitle}</p>}
@@ -63,7 +63,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setPage('transacties')}
-                className="mt-3 text-sm font-semibold text-[rgb(var(--series-1))] hover:underline"
+                className="mt-3 text-sm font-semibold text-[rgb(var(--accent-text))] hover:underline"
               >
                 Alle transacties bekijken →
               </button>

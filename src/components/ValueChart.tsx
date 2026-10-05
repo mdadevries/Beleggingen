@@ -98,22 +98,22 @@ export const ValueChart: React.FC<ValueChartProps> = ({ points }) => {
               x2={WIDTH - PADDING.right}
               y1={t.y}
               y2={t.y}
-              stroke="#e1e0d9"
+              style={{ stroke: 'rgb(var(--border))' }}
               strokeWidth={1}
             />
-            <text x={PADDING.left} y={t.y - 4} fontSize={10} fill="#898781">
+            <text x={PADDING.left} y={t.y - 4} fontSize={10} style={{ fill: 'rgb(var(--text-muted))' }}>
               {formatEuro(t.value)}
             </text>
           </g>
         ))}
 
         {/* Area wash */}
-        <path d={areaPath} fill="#2a78d6" opacity={0.1} stroke="none" />
+        <path d={areaPath} style={{ fill: 'rgb(var(--series-1))' }} opacity={0.1} stroke="none" />
         {/* Lijn */}
-        <path d={path} fill="none" stroke="#2a78d6" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        <path d={path} fill="none" style={{ stroke: 'rgb(var(--series-1))' }} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
 
         {/* Eindpunt-marker met surface ring */}
-        <circle cx={last.x} cy={last.y} r={5} fill="#2a78d6" stroke="#fff" strokeWidth={2} />
+        <circle cx={last.x} cy={last.y} r={5} style={{ fill: 'rgb(var(--series-1))', stroke: 'rgb(var(--chart-ring))' }} strokeWidth={2} />
 
         {/* Hover crosshair */}
         {hovered && (
@@ -123,11 +123,11 @@ export const ValueChart: React.FC<ValueChartProps> = ({ points }) => {
               x2={hovered.x}
               y1={PADDING.top}
               y2={HEIGHT - PADDING.bottom}
-              stroke="#c3c2b7"
+              style={{ stroke: 'rgb(var(--border-strong))' }}
               strokeWidth={1}
               strokeDasharray="3,3"
             />
-            <circle cx={hovered.x} cy={hovered.y} r={5} fill="#2a78d6" stroke="#fff" strokeWidth={2} />
+            <circle cx={hovered.x} cy={hovered.y} r={5} style={{ fill: 'rgb(var(--series-1))', stroke: 'rgb(var(--chart-ring))' }} strokeWidth={2} />
           </>
         )}
 
@@ -138,7 +138,7 @@ export const ValueChart: React.FC<ValueChartProps> = ({ points }) => {
             x={coords[i].x}
             y={HEIGHT - 8}
             fontSize={10}
-            fill="#898781"
+            style={{ fill: 'rgb(var(--text-muted))' }}
             textAnchor={idx === 0 ? 'start' : idx === 2 ? 'end' : 'middle'}
           >
             {formatDate(points[i].date)}
@@ -148,14 +148,14 @@ export const ValueChart: React.FC<ValueChartProps> = ({ points }) => {
 
       {hovered && (
         <div
-          className="absolute pointer-events-none -translate-x-1/2 -translate-y-full bg-[rgb(var(--text-primary))] text-white text-xs rounded-lg px-2.5 py-1.5 shadow-lg whitespace-nowrap"
+          className="absolute pointer-events-none -translate-x-1/2 -translate-y-full bg-[rgb(var(--text-primary))] text-[rgb(var(--surface))] text-xs rounded-lg px-2.5 py-1.5 shadow-lg whitespace-nowrap"
           style={{
             left: `${(hovered.x / WIDTH) * 100}%`,
             top: `${(hovered.y / HEIGHT) * 100 - 4}%`,
           }}
         >
           <div className="font-semibold">{formatEuro(hovered.point.value)}</div>
-          <div className="text-white/70">{formatDate(hovered.point.date)}</div>
+          <div className="opacity-70">{formatDate(hovered.point.date)}</div>
         </div>
       )}
     </div>

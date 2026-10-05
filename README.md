@@ -31,6 +31,7 @@ npm run dev
   zien zonder je echte wachtwoord te delen; een demo-sessie roept
   `/api/transactions` nooit aan, dus er kan ook nooit per ongeluk echte
   portefeuilledata in terechtkomen.
+- **Licht/donker**: knop in de header wisselt tussen apparaat (standaard), licht en donker en onthoudt je keuze. Het thema wordt vóór de eerste paint gezet (geen witte flits), ook op de inlogpagina. Kleuren lopen via tokens in `src/index.css`; de grafiekkleuren (`series-*`) blijven in beide modi gelijk.
 - Rustige, moderne stijl, mobile-first, WCAG 2.2 AA contrast, zichtbare
   focus-ring voor toetsenbordgebruik, `prefers-reduced-motion` gerespecteerd.
 

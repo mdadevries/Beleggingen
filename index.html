@@ -3,6 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Zet het thema vóór de eerste paint (geen witte flits in donkere modus).
+      (function () {
+        try {
+          var pref = localStorage.getItem('beleggingen_theme') || 'system';
+          var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+        } catch (e) {}
+      })();
+    </script>
     <title>Beleggingen — Portefeuille</title>
     <meta
       name="description"
