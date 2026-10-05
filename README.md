@@ -22,6 +22,12 @@ npm run dev
   `/api/transactions`, toont de site die automatisch i.p.v. de demodata (zie
   "Automatische import" hieronder). Zolang er nog niets binnen is, blijft de
   site demodata tonen met een duidelijke banner.
+- **Live koersen**: `/api/quotes` zoekt per aandeel (via de ISIN uit je DEGIRO-mail)
+  een koers op bij Yahoo Finance, rekent 'm om naar euro's en onthoudt het
+  gevonden symbool. Bron is een **niet-officiële** Yahoo-endpoint: licht
+  vertraagd, zonder garantie. Lukt het niet, dan valt de site per aandeel terug
+  op de laatste transactieprijs en zegt dat ook (regel onder de kerncijfers).
+  Koersen zijn alleen voor eigen overzicht, geen handelsadvies.
 - **Login**: de hele site zit achter één wachtwoord (Vercel Edge Middleware),
   want er staat straks eigen financiële data in. `/api/*` loopt er niet
   doorheen — die heeft eigen auth.
@@ -123,8 +129,8 @@ invult (stap 2 hierboven) — die twee moeten exact overeenkomen.
 - Pagina per aandeel (gemiddelde koers, winst/verlies, eigen transacties)
 - Beleggingsdagboek (notitie per transactie)
 - Chatbot voor vragen over transacties
-- Live koersen — `currentPrice` per aandeel wordt nu bijgewerkt naar de
-  laatst bekende transactieprijs, geen actuele marktkoers
+- Koershistorie: de grafiek 'Waarde door de tijd' blijft een geschat verloop
+  (alleen de huidige koers is echt), geen echte historische koersen
 
 ## Structuur
 
@@ -136,7 +142,8 @@ src/
   components/  KpiRow, AllocationBar, ValueChart, RecentTransactions,
                TransactionsTable, TransactionBadge, Nav
 api/
-  transactions.ts   GET (lijst) / POST (nieuwe order, x-api-key)
+  transactions.ts   GET (lijst, alleen echte sessie) / POST (nieuwe order, x-api-key)
+  quotes.ts         GET live koersen in euro's (alleen echte sessie)
   login.ts          wachtwoord -> auth-cookie
   logout.ts         cookie wissen
 middleware.ts       Edge Middleware: wachtwoord-check voor de hele site

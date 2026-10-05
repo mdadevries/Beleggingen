@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { Redis } from '@upstash/redis';
+import crypto from 'crypto';
 
 // Opslag:
 //   hash "transactions"  key = OrderID (DEGIRO) of een gegenereerde id -> JSON-string Transaction
@@ -16,6 +17,36 @@ interface StoredStock {
   name: string;
   currentPrice: number;
   colorSlot: 1 | 2 | 3 | 4 | 5;
+  /** Uit de DEGIRO-mail; nodig om een echte beurskoers op te zoeken (/api/quotes). */
+  isin?: string;
+  /** Door /api/quotes opgezocht en bewaard, zodat het maar één keer hoeft. */
+  symbol?: string;
+}
+
+const ISIN_RE = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;
+
+// Bewust zelfstandig (geen import uit een ander bestand): Vercel compileert elk
+// bestand onder /api los, relatieve imports bestaan op de server niet.
+// Houd deze constanten gelijk aan middleware.ts en de andere /api-bestanden.
+const AUTH_COOKIE = 'beleggingen_auth';
+const TOKEN_MESSAGE = 'auth:v1';
+
+function parseCookie(header: string | undefined, name: string): string | null {
+  if (!header) return null;
+  for (const part of header.split(';')) {
+    const [k, ...rest] = part.trim().split('=');
+    if (k === name) return rest.join('=');
+  }
+  return null;
+}
+
+/** Alleen de echte (wachtwoord-)sessie mag portefeuilledata lezen; demo en anoniem niet. */
+function isRealSession(req: VercelRequest): boolean {
+  const secret = process.env.SESSION_SECRET;
+  const token = parseCookie(req.headers.cookie, AUTH_COOKIE);
+  if (!secret || !token) return false;
+  const expected = crypto.createHmac('sha256', secret).update(TOKEN_MESSAGE).digest('hex');
+  return timingSafeEqual(token, expected);
 }
 
 interface StoredTransaction {
@@ -61,6 +92,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'GET') {
+    if (!isRealSession(req)) {
+      res.status(401).json({ error: 'Niet ingelogd.' });
+      return;
+    }
     try {
       const [txRaw, stockRaw] = await Promise.all([
         redis.hgetall<Record<string, string>>(TRANSACTIONS_KEY),
@@ -90,6 +125,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
       const { orderId, date, ticker, name, type, quantity, price } = body || {};
+      const isin: string | undefined = typeof body?.isin === 'string' && body.isin ? body.isin.trim().toUpperCase() : undefined;
+      if (isin !== undefined && !ISIN_RE.test(isin)) {
+        res.status(400).json({ error: 'Ongeldige ISIN.' });
+        return;
+      }
 
       if (typeof orderId !== 'string' || !orderId.trim()) {
         res.status(400).json({ error: 'Ongeldige of ontbrekende orderId.' });
@@ -116,14 +156,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       }
 
+      const tickerKey = ticker.trim().toUpperCase();
+
       // Dedup: dezelfde order-mail twee keer verwerkt mag geen dubbele transactie geven.
+      // Wel vullen we dan een ontbrekende ISIN aan op het aandeel (zo kan een
+      // order van vóór de ISIN-koppeling alsnog een echte koers krijgen).
       const alreadyExists = await redis.hexists(TRANSACTIONS_KEY, orderId);
       if (alreadyExists) {
+        if (isin) {
+          const raw = await redis.hget<string>(STOCKS_KEY, tickerKey);
+          if (raw) {
+            const st: StoredStock = typeof raw === 'string' ? JSON.parse(raw) : (raw as unknown as StoredStock);
+            if (!st.isin) {
+              await redis.hset(STOCKS_KEY, { [tickerKey]: JSON.stringify({ ...st, isin }) });
+            }
+          }
+        }
         res.status(200).json({ ok: true, id: orderId, duplicate: true });
         return;
       }
-
-      const tickerKey = ticker.trim().toUpperCase();
 
       // Stock upserten: nieuw aandeel krijgt een volgende kleurslot, bestaande
       // krijgt zijn 'currentPrice' bijgewerkt naar de laatst bekende transactieprijs
@@ -132,11 +183,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       let stock: StoredStock;
       if (existingStockRaw) {
         const existing: StoredStock = typeof existingStockRaw === 'string' ? JSON.parse(existingStockRaw) : (existingStockRaw as unknown as StoredStock);
-        stock = { ...existing, name: name?.trim() || existing.name, currentPrice: price };
+        stock = { ...existing, name: name?.trim() || existing.name, currentPrice: price, isin: existing.isin ?? isin };
       } else {
         const stockCount = await redis.hlen(STOCKS_KEY);
         const colorSlot = COLOR_SLOTS[stockCount % COLOR_SLOTS.length];
-        stock = { ticker: tickerKey, name: (name && String(name).trim()) || tickerKey, currentPrice: price, colorSlot };
+        stock = { ticker: tickerKey, name: (name && String(name).trim()) || tickerKey, currentPrice: price, colorSlot, ...(isin ? { isin } : {}) };
       }
 
       const transaction: StoredTransaction = {

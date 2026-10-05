@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Nav, Page } from './components/Nav.tsx';
 import { KpiRow } from './components/KpiRow.tsx';
+import { QuoteNote } from './components/QuoteNote.tsx';
 import { AllocationBar } from './components/AllocationBar.tsx';
 import { ValueChart } from './components/ValueChart.tsx';
 import { RecentTransactions } from './components/RecentTransactions.tsx';
@@ -24,7 +25,7 @@ const Card: React.FC<{ title: string; subtitle?: string; children: React.ReactNo
 
 export default function App() {
   const [page, setPage] = useState<Page>('overzicht');
-  const { stocks, transactions, isDemo, demoReason, loading } = usePortfolioData();
+  const { stocks, transactions, isDemo, demoReason, loading, quoteStatus } = usePortfolioData();
 
   const positions = useMemo(() => computePositions(stocks, transactions), [stocks, transactions]);
   const totals = useMemo(() => computeTotals(positions), [positions]);
@@ -49,6 +50,7 @@ export default function App() {
         {page === 'overzicht' ? (
           <>
             <KpiRow totals={totals} showInvested={showInvested} />
+            {!isDemo && <QuoteNote status={quoteStatus} />}
 
             <Card title="Verdeling per aandeel" subtitle="Waar je geld op dit moment in zit">
               <AllocationBar positions={positions} />

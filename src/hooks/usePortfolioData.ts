@@ -4,6 +4,14 @@ import { DEMO_STOCKS, DEMO_TRANSACTIONS } from '../data/demoData.ts';
 
 export type DemoReason = 'account' | 'no-data' | null;
 
+/** Hoeveel aandelen een live koers kregen (anders: laatste transactieprijs). */
+export interface QuoteStatus {
+  live: number;
+  total: number;
+  /** Nieuwste tijdstip van de gebruikte koersen (ISO), indien bekend */
+  asOf: string | null;
+}
+
 interface PortfolioData {
   stocks: Stock[];
   transactions: Transaction[];
@@ -13,6 +21,8 @@ interface PortfolioData {
   demoReason: DemoReason;
   loading: boolean;
   error: string | null;
+  /** null = (nog) niet geprobeerd of niet van toepassing (demo) */
+  quoteStatus: QuoteStatus | null;
 }
 
 /**
@@ -33,6 +43,7 @@ export function usePortfolioData(): PortfolioData {
     demoReason: null,
     loading: true,
     error: null,
+    quoteStatus: null,
   });
 
   useEffect(() => {
@@ -55,6 +66,7 @@ export function usePortfolioData(): PortfolioData {
             demoReason: 'account',
             loading: false,
             error: null,
+            quoteStatus: null,
           });
           return; // nooit /api/transactions aanroepen voor een demo-sessie
         }
@@ -74,7 +86,9 @@ export function usePortfolioData(): PortfolioData {
                 demoReason: null,
                 loading: false,
                 error: null,
+                quoteStatus: null,
               });
+              loadQuotes(data.stocks);
             } else {
               setState((s) => ({ ...s, demoReason: 'no-data', loading: false }));
             }
@@ -89,6 +103,40 @@ export function usePortfolioData(): PortfolioData {
             }));
           });
       });
+
+    /**
+     * Echte koersen er achteraan: de pagina verschijnt meteen met de laatste
+     * transactieprijs, en zodra /api/quotes antwoordt worden de koersen
+     * bijgewerkt. Faalt dat (Yahoo weg, niet gevonden), dan blijft alles zoals
+     * het was en zegt quoteStatus dat eerlijk.
+     */
+    function loadQuotes(stocks: Stock[]) {
+      fetch('/api/quotes')
+        .then((res) => {
+          if (!res.ok) throw new Error(`Status ${res.status}`);
+          return res.json();
+        })
+        .then((data: { quotes: Record<string, { price: number; asOf: string | null }> }) => {
+          if (cancelled) return;
+          const quotes = data.quotes ?? {};
+          const live = stocks.filter((s) => quotes[s.ticker]).length;
+          const asOf =
+            Object.values(quotes)
+              .map((q) => q.asOf)
+              .filter((t): t is string => !!t)
+              .sort()
+              .pop() ?? null;
+          setState((st) => ({
+            ...st,
+            stocks: st.stocks.map((s) => (quotes[s.ticker] ? { ...s, currentPrice: quotes[s.ticker].price } : s)),
+            quoteStatus: { live, total: stocks.length, asOf },
+          }));
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setState((st) => ({ ...st, quoteStatus: { live: 0, total: stocks.length, asOf: null } }));
+        });
+    }
 
     return () => {
       cancelled = true;

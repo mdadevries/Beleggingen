@@ -5,6 +5,8 @@ export interface Stock {
   currentPrice: number;
   /** Kleursleutel voor grafieken (categorical palette, vaste volgorde) */
   colorSlot: 1 | 2 | 3 | 4 | 5;
+  /** Alleen voor echte data (door de backend gebruikt om koersen op te zoeken). */
+  isin?: string;
 }
 
 export type TransactionType = 'Kopen' | 'Verkopen';
