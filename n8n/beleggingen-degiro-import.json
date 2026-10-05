@@ -21,7 +21,10 @@
       "name": "Nieuwe DEGIRO-mail",
       "type": "n8n-nodes-base.gmailTrigger",
       "typeVersion": 1.2,
-      "position": [-420, 0],
+      "position": [
+        -420,
+        0
+      ],
       "credentials": {
         "gmailOAuth2": {
           "name": "Gmail account"
@@ -30,13 +33,16 @@
     },
     {
       "parameters": {
-        "jsCode": "// Parseert een DEGIRO-transactiebevestiging naar een transactie voor de website.\n// Geeft { recognized: false, ... } terug als de mail geen orderbevestiging is\n// (bv. een stortingsmail) — die mail breekt de flow dan niet, maar gaat naar de\n// foutmelding-tak.\n\nconst MONTHS = {\n  jan: '01', feb: '02', mrt: '03', apr: '04', mei: '05', jun: '06',\n  jul: '07', aug: '08', sep: '09', okt: '10', nov: '11', dec: '12',\n};\n\nconst STOPWORDS = new Set([\n  'ltd', 'plc', 'nv', 'n.v.', 'inc', 'sa', 'ag', 'se', 'class', 'a', 'b',\n  'etf', 'ucits', 'dist', 'acc', 'accumulating', 'core', '-', '(usd)', '(eur)',\n]);\n\nfunction deriveTicker(name) {\n  const words = name.split(/\\s+/).filter((w) => w && !STOPWORDS.has(w.toLowerCase().replace(/[.,]/g, '')));\n  const base = (words[0] || name.replace(/[^A-Za-z]/g, '')).toUpperCase();\n  return base.slice(0, 6);\n}\n\nfunction field(body, label) {\n  const re = new RegExp('\\\\|\\\\s*' + label + '\\\\s*\\\\|\\\\s*(.+?)\\\\s*\\\\|', 'i');\n  const m = body.match(re);\n  return m ? m[1].trim() : null;\n}\n\n// De Gmail Trigger-node geeft, afhankelijk van n8n-versie/instelling, de body\n// terug als json.text, json.textPlain of alleen de ruwe payload.parts. Deze\n// functie probeert ze op volgorde, zodat de node niet stukgaat op een\n// veldnaam-verschil.\nfunction extractBody(json) {\n  if (typeof json.text === 'string' && json.text.length > 0) return json.text;\n  if (typeof json.textPlain === 'string' && json.textPlain.length > 0) return json.textPlain;\n  if (json.payload && json.payload.parts) {\n    const stack = [...json.payload.parts];\n    while (stack.length) {\n      const part = stack.shift();\n      if (part.mimeType === 'text/plain' && part.body && part.body.data) {\n        const b64 = part.body.data.replace(/-/g, '+').replace(/_/g, '/');\n        return Buffer.from(b64, 'base64').toString('utf-8');\n      }\n      if (part.parts) stack.push(...part.parts);\n    }\n  }\n  return typeof json.snippet === 'string' ? json.snippet : '';\n}\n\nfunction extractSubject(json) {\n  if (typeof json.subject === 'string') return json.subject;\n  if (json.payload && Array.isArray(json.payload.headers)) {\n    const h = json.payload.headers.find((h) => h.name && h.name.toLowerCase() === 'subject');\n    if (h) return h.value;\n  }\n  return '';\n}\n\nconst results = [];\n\nfor (const item of items) {\n  const subject = extractSubject(item.json);\n  const body = extractBody(item.json);\n\n  const orderId = field(body, 'OrderID');\n  const txDate = field(body, 'Transactiedatum');\n  const opdracht = field(body, 'Opdracht');\n  const aantal = field(body, 'Aantal');\n  const waarde = field(body, 'Waarde');\n\n  if (!orderId || !txDate || !opdracht || !aantal || !waarde) {\n    results.push({ json: { recognized: false, subject, reason: 'Geen OrderID/Transactiedatum/Opdracht/Aantal/Waarde gevonden in de mail.' } });\n    continue;\n  }\n\n  const dateMatch = txDate.match(/(\\d{1,2}) (\\w{3})\\w* (\\d{4})/);\n  const month = dateMatch ? MONTHS[dateMatch[2].toLowerCase()] : null;\n  const type = opdracht.toLowerCase().startsWith('koop') ? 'Kopen' : opdracht.toLowerCase().startsWith('verkoop') ? 'Verkopen' : null;\n  const quantity = parseInt((aantal || '').replace(/\\D/g, ''), 10);\n  const waardeMatch = waarde.match(/EUR\\s*(-?[\\d.,]+)/);\n\n  if (!dateMatch || !month || !type || !quantity || !waardeMatch) {\n    results.push({ json: { recognized: false, subject, reason: 'Order-velden gevonden maar niet allemaal leesbaar (datum/type/aantal/waarde).' } });\n    continue;\n  }\n\n  const date = `${dateMatch[3]}-${month}-${dateMatch[1].padStart(2, '0')}`;\n  const waardeEUR = Math.abs(parseFloat(waardeMatch[1].replace(/\\./g, '').replace(',', '.')));\n  const price = Math.round((waardeEUR / quantity) * 10000) / 10000;\n  const nameMatch = subject.match(/^DEGIRO - Transactiebevestiging:\\s*(?:Koop|Verkoop)\\s*\\d+\\s*(.+?)\\s*@/i);\n  const name = nameMatch ? nameMatch[1].trim() : 'Onbekend aandeel';\n\n  results.push({\n    json: {\n      recognized: true,\n      orderId,\n      date,\n      ticker: deriveTicker(name),\n      name,\n      type,\n      quantity,\n      price,\n      subject,\n    },\n  });\n}\n\nreturn results;"
+        "jsCode": "// Parseert een DEGIRO-transactiebevestiging naar een transactie voor de website.\n// Geeft { recognized: false, ... } terug als de mail geen orderbevestiging is\n// (bv. een stortingsmail) — die mail breekt de flow dan niet, maar gaat naar de\n// foutmelding-tak.\n//\n// n8n's Gmail Trigger levert de mailbody als platte tekst (geen tabel, geen\n// \"|\"-tekens): DEGIRO's labels en waarden staan achter elkaar, met willekeurige\n// regelafbrekingen halverwege een waarde, bv.:\n//   \"OrderID 18cff972-... Transactiedatum 28 sep 2026,\\n15:30:02 ISIN KYG722451229\n//    Opdracht Koop Type Limit Order Beurs NDQ Handelsplaats XNAS Aantal 17 ...\"\n// We zoeken daarom de positie van elk bekend label in de (whitespace-genormaliseerde)\n// tekst, sorteren op positie, en de waarde van een label is alles tot het volgende\n// gevonden label. Dat werkt ongeacht volgorde-afwijkingen of ontbrekende velden.\n\nconst MONTHS = {\n  jan: '01', feb: '02', mrt: '03', apr: '04', mei: '05', jun: '06',\n  jul: '07', aug: '08', sep: '09', okt: '10', nov: '11', dec: '12',\n};\n\nconst STOPWORDS = new Set([\n  'ltd', 'plc', 'nv', 'n.v.', 'inc', 'sa', 'ag', 'se', 'class', 'a', 'b',\n  'etf', 'ucits', 'dist', 'acc', 'accumulating', 'core', '-', '(usd)', '(eur)',\n]);\n\nfunction deriveTicker(name) {\n  const words = name.split(/\\s+/).filter((w) => w && !STOPWORDS.has(w.toLowerCase().replace(/[.,]/g, '')));\n  const base = (words[0] || name.replace(/[^A-Za-z]/g, '')).toUpperCase();\n  return base.slice(0, 6);\n}\n\nconst LABELS = [\n  'OrderID', 'Transactiedatum', 'ISIN', 'Opdracht', 'Type', 'Beurs', 'Handelsplaats',\n  'Aantal', 'Koers', 'Lokale waarde', 'Waarde', 'Wisselkoers', 'AutoFX kosten',\n  'Transactiekosten en/of kosten van derden', 'Totale Kosten', 'Totaal',\n];\n\nfunction extractFields(rawBody) {\n  const body = rawBody.replace(/\\s+/g, ' ');\n  const found = [];\n  for (const label of LABELS) {\n    const idx = body.indexOf(label);\n    if (idx !== -1) found.push({ label, start: idx, end: idx + label.length });\n  }\n  found.sort((a, b) => a.start - b.start);\n  const fields = {};\n  for (let i = 0; i < found.length; i++) {\n    const from = found[i].end;\n    const to = i + 1 < found.length ? found[i + 1].start : body.length;\n    fields[found[i].label] = body.slice(from, to).trim();\n  }\n  return fields;\n}\n\n// De Gmail Trigger-node geeft, afhankelijk van n8n-versie/instelling, de body\n// terug als json.text, json.textPlain of alleen de ruwe payload.parts. Deze\n// functie probeert ze op volgorde, zodat de node niet stukgaat op een\n// veldnaam-verschil.\nfunction extractBody(json) {\n  if (typeof json.text === 'string' && json.text.length > 0) return json.text;\n  if (typeof json.textPlain === 'string' && json.textPlain.length > 0) return json.textPlain;\n  if (json.payload && json.payload.parts) {\n    const stack = [...json.payload.parts];\n    while (stack.length) {\n      const part = stack.shift();\n      if (part.mimeType === 'text/plain' && part.body && part.body.data) {\n        const b64 = part.body.data.replace(/-/g, '+').replace(/_/g, '/');\n        return Buffer.from(b64, 'base64').toString('utf-8');\n      }\n      if (part.parts) stack.push(...part.parts);\n    }\n  }\n  return typeof json.snippet === 'string' ? json.snippet : '';\n}\n\nfunction extractSubject(json) {\n  if (typeof json.subject === 'string') return json.subject;\n  if (json.payload && Array.isArray(json.payload.headers)) {\n    const h = json.payload.headers.find((h) => h.name && h.name.toLowerCase() === 'subject');\n    if (h) return h.value;\n  }\n  return '';\n}\n\nconst results = [];\n\nfor (const item of items) {\n  const subject = extractSubject(item.json);\n  const body = extractBody(item.json);\n  const fields = extractFields(body);\n\n  const orderId = fields['OrderID'] || null;\n  const txDate = fields['Transactiedatum'] || null;\n  const opdracht = fields['Opdracht'] || null;\n  const aantal = fields['Aantal'] || null;\n  const waarde = fields['Waarde'] || null;\n\n  if (!orderId || !txDate || !opdracht || !aantal || !waarde) {\n    results.push({ json: { recognized: false, subject, reason: 'Geen OrderID/Transactiedatum/Opdracht/Aantal/Waarde gevonden in de mail.' } });\n    continue;\n  }\n\n  const dateMatch = txDate.match(/(\\d{1,2}) (\\w{3})\\w* (\\d{4})/);\n  const month = dateMatch ? MONTHS[dateMatch[2].toLowerCase()] : null;\n  const type = opdracht.toLowerCase().startsWith('koop') ? 'Kopen' : opdracht.toLowerCase().startsWith('verkoop') ? 'Verkopen' : null;\n  const quantity = parseInt((aantal || '').replace(/\\D/g, ''), 10);\n  const waardeMatch = waarde.match(/EUR\\s*(-?[\\d.,]+)/);\n\n  if (!dateMatch || !month || !type || !quantity || !waardeMatch) {\n    results.push({ json: { recognized: false, subject, reason: 'Order-velden gevonden maar niet allemaal leesbaar (datum/type/aantal/waarde).' } });\n    continue;\n  }\n\n  const date = `${dateMatch[3]}-${month}-${dateMatch[1].padStart(2, '0')}`;\n  const waardeEUR = Math.abs(parseFloat(waardeMatch[1].replace(/\\./g, '').replace(',', '.')));\n  const price = Math.round((waardeEUR / quantity) * 10000) / 10000;\n  const nameMatch = subject.match(/^DEGIRO - Transactiebevestiging:\\s*(?:Koop|Verkoop)\\s*\\d+\\s*(.+?)\\s*@/i);\n  const name = nameMatch ? nameMatch[1].trim() : 'Onbekend aandeel';\n\n  results.push({\n    json: {\n      recognized: true,\n      orderId,\n      date,\n      ticker: deriveTicker(name),\n      name,\n      type,\n      quantity,\n      price,\n      subject,\n    },\n  });\n}\n\nreturn results;"
       },
       "id": "a1a1a1a1-0002-4000-8000-000000000002",
       "name": "Mail parsen",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-200, 0]
+      "position": [
+        -200,
+        0
+      ]
     },
     {
       "parameters": {
@@ -66,7 +72,10 @@
       "name": "Order herkend?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [20, 0]
+      "position": [
+        20,
+        0
+      ]
     },
     {
       "parameters": {
@@ -83,7 +92,10 @@
       "name": "Naar website sturen",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [260, -100],
+      "position": [
+        260,
+        -100
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "name": "DEGIRO webhook key"
@@ -103,7 +115,10 @@
       "name": "Melding bij fout",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
-      "position": [260, 120],
+      "position": [
+        260,
+        120
+      ],
       "credentials": {
         "gmailOAuth2": {
           "name": "Gmail account"
