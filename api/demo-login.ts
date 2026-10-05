@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { AUTH_COOKIE, DEMO_TOKEN_MESSAGE, tokenFor } from './login.ts';
+import { AUTH_COOKIE, DEMO_TOKEN_MESSAGE, tokenFor } from '../lib/auth.ts';
 
 // Logt in als demo-account: geen wachtwoord nodig, altijd demodata (nooit
 // echte transacties), zodat iemand de site kan laten zien zonder het echte

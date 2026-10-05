@@ -1,28 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import crypto from 'crypto';
-
-export const AUTH_COOKIE = 'beleggingen_auth';
-export const TOKEN_MESSAGE = 'auth:v1';
-// Los bericht voor het demo-account: zelfde geheim (SESSION_SECRET), andere
-// afgeleide token. Geeft toegang tot de site (middleware laat 'm door) maar
-// usePortfolioData() herkent 'm en laat dan NOOIT echte transacties zien —
-// alleen de demodata, ook als er al echte data in Redis staat.
-export const DEMO_TOKEN_MESSAGE = 'auth:demo:v1';
-
-export function tokenFor(secret: string, message: string): string {
-  return crypto.createHmac('sha256', secret).update(message).digest('hex');
-}
-
-function expectedToken(secret: string): string {
-  return tokenFor(secret, TOKEN_MESSAGE);
-}
-
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
+import { AUTH_COOKIE, TOKEN_MESSAGE, tokenFor, timingSafeEqual } from '../lib/auth.ts';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -47,7 +24,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const token = expectedToken(sessionSecret);
+    const token = tokenFor(sessionSecret, TOKEN_MESSAGE);
     const maxAgeSeconds = 60 * 60 * 24 * 30; // 30 dagen
     res.setHeader(
       'Set-Cookie',

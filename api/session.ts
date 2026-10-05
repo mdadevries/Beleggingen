@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { AUTH_COOKIE, TOKEN_MESSAGE, DEMO_TOKEN_MESSAGE, tokenFor } from './login.ts';
+import { AUTH_COOKIE, TOKEN_MESSAGE, DEMO_TOKEN_MESSAGE, tokenFor, timingSafeEqual } from '../lib/auth.ts';
 
 // Vertelt de front-end welk type sessie dit is, zodat usePortfolioData() weet
 // of hij echte transacties mag ophalen (role "real") of alleen demodata mag
@@ -13,13 +13,6 @@ function parseCookie(header: string | undefined, name: string): string | null {
     if (k === name) return rest.join('=');
   }
   return null;
-}
-
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
