@@ -95,17 +95,20 @@ project (genereert automatisch `KV_REST_API_URL` en `KV_REST_API_TOKEN`).
 Daarnaast deze environment variables toevoegen in **Vercel → Settings →
 Environment Variables** (Production + Preview):
 
-| Variabele          | Waarde                                              |
-| ------------------- | ---------------------------------------------------- |
-| `SITE_PASSWORD`     | een wachtwoord dat jij zelf kiest, om in te loggen   |
-| `SESSION_SECRET`    | `9971a913bda76ee693ed406dd996145cdb4d3f266fe0616db8c947cb09a19c03` |
-| `N8N_API_SECRET`    | `5ccc0141aa6740236239dd561cb8faa0f348e622106c5db2603941b0f70a3197` |
+| Variabele | Waarde |
+| --- | --- |
+| `SITE_PASSWORD` | een wachtwoord dat jij zelf kiest, om in te loggen |
+| `SESSION_SECRET` | een lange willekeurige string (zelf genereren, bv. `openssl rand -hex 32`) |
+| `N8N_API_SECRET` | een lange willekeurige string (zelf genereren) |
 
-(`SESSION_SECRET` en `N8N_API_SECRET` zijn al willekeurig gegenereerd — gewoon
-kopiëren. Na het toevoegen: **Redeploy**, anders zijn ze niet actief.)
+**Zet hier nooit de echte waarden in dit bestand** — dit project staat op een
+publieke GitHub-repo, dus alles hierin is voor iedereen leesbaar. Bewaar je
+eigen gegenereerde waarden alleen in Vercel (Environment Variables) en in de
+n8n-credential, nergens anders. Na het toevoegen in Vercel: **Redeploy**,
+anders zijn ze niet actief.
 
 `N8N_API_SECRET` is dezelfde waarde die je als "DEGIRO webhook key" in n8n
-invult (stap 2 hierboven).
+invult (stap 2 hierboven) — die twee moeten exact overeenkomen.
 
 ## Nog niet gebouwd (bewust, voor latere versie)
 
