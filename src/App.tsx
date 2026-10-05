@@ -24,7 +24,7 @@ const Card: React.FC<{ title: string; subtitle?: string; children: React.ReactNo
 
 export default function App() {
   const [page, setPage] = useState<Page>('overzicht');
-  const { stocks, transactions, isDemo, loading } = usePortfolioData();
+  const { stocks, transactions, isDemo, demoReason, loading } = usePortfolioData();
 
   const positions = useMemo(() => computePositions(stocks, transactions), [stocks, transactions]);
   const totals = useMemo(() => computeTotals(positions), [positions]);
@@ -43,7 +43,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Nav page={page} onNavigate={setPage} isDemo={isDemo} />
+      <Nav page={page} onNavigate={setPage} isDemo={isDemo} demoReason={demoReason} />
 
       <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-5">
         {page === 'overzicht' ? (

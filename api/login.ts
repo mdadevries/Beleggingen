@@ -2,10 +2,19 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
 
 export const AUTH_COOKIE = 'beleggingen_auth';
-const TOKEN_MESSAGE = 'auth:v1';
+export const TOKEN_MESSAGE = 'auth:v1';
+// Los bericht voor het demo-account: zelfde geheim (SESSION_SECRET), andere
+// afgeleide token. Geeft toegang tot de site (middleware laat 'm door) maar
+// usePortfolioData() herkent 'm en laat dan NOOIT echte transacties zien —
+// alleen de demodata, ook als er al echte data in Redis staat.
+export const DEMO_TOKEN_MESSAGE = 'auth:demo:v1';
+
+export function tokenFor(secret: string, message: string): string {
+  return crypto.createHmac('sha256', secret).update(message).digest('hex');
+}
 
 function expectedToken(secret: string): string {
-  return crypto.createHmac('sha256', secret).update(TOKEN_MESSAGE).digest('hex');
+  return tokenFor(secret, TOKEN_MESSAGE);
 }
 
 function timingSafeEqual(a: string, b: string): boolean {

@@ -10,7 +10,7 @@
     --border: 225 224 217; /* #e1e0d9 */
     --border-strong: 195 194 183; /* #c3c2b7 */
 
-    --text-primary: 11 11 11; /* #0b0b0b */
+    --text-primary: 31 41 55; /* #1f2937 — bewust geen puur zwart op wit */
     --text-secondary: 82 81 78; /* #52514e */
     --text-muted: 137 135 129; /* #898781 */
 
@@ -40,5 +40,23 @@
   /* Tabulaire cijfers voor kolommen die moeten uitlijnen (tabel, assen) */
   .tabular {
     font-variant-numeric: tabular-nums;
+  }
+
+  /* Zichtbare focus-ring voor toetsenbordgebruik, overal consistent —
+     respecteert :focus-visible zodat een muisklik geen ring triggert. */
+  :focus-visible {
+    outline: 2px solid rgb(var(--series-1));
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Respecteer de voorkeur voor minder beweging (toegankelijkheid). */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }

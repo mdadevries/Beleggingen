@@ -25,7 +25,14 @@ npm run dev
 - **Login**: de hele site zit achter één wachtwoord (Vercel Edge Middleware),
   want er staat straks eigen financiële data in. `/api/*` loopt er niet
   doorheen — die heeft eigen auth.
-- Rustige, moderne stijl, mobile-first, WCAG 2.2 AA contrast.
+- **Demo-account**: op de inlogpagina staat ook "Doorgaan met demo-account" —
+  geen wachtwoord nodig, logt in met een aparte (server-side afgeleide)
+  sessie die **altijd** demodata toont. Zo kun je de site aan iemand laten
+  zien zonder je echte wachtwoord te delen; een demo-sessie roept
+  `/api/transactions` nooit aan, dus er kan ook nooit per ongeluk echte
+  portefeuilledata in terechtkomen.
+- Rustige, moderne stijl, mobile-first, WCAG 2.2 AA contrast, zichtbare
+  focus-ring voor toetsenbordgebruik, `prefers-reduced-motion` gerespecteerd.
 
 ### Waarom een gestapelde balk i.p.v. een donutgrafiek?
 
