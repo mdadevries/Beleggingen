@@ -1,5 +1,17 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { AUTH_COOKIE, DEMO_TOKEN_MESSAGE, tokenFor } from '../lib/auth.ts';
+import crypto from 'crypto';
+
+// Bewust per bestand zelfstandig (geen import uit een ander bestand): Vercel
+// compileert elk bestand onder /api los en neemt relatieve .ts-imports niet
+// mee, waardoor de functie op de server crasht (ERR_MODULE_NOT_FOUND).
+// Houd deze constanten gelijk aan middleware.ts en de andere /api-bestanden.
+const AUTH_COOKIE = 'beleggingen_auth';
+const DEMO_TOKEN_MESSAGE = 'auth:demo:v1';
+
+function tokenFor(secret: string, message: string): string {
+  return crypto.createHmac('sha256', secret).update(message).digest('hex');
+}
+
 
 // Logt in als demo-account: geen wachtwoord nodig, altijd demodata (nooit
 // echte transacties), zodat iemand de site kan laten zien zonder het echte
