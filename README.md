@@ -2,7 +2,7 @@
 
 Persoonlijk overzicht van een beleggingsportefeuille: waarde, verdeling per
 aandeel, waardeverloop en transacties. React + Vite + TypeScript + Tailwind,
-met een Vercel-backend (API + Redis) en een n8n-workflow die DEGIRO-orders
+met een Vercel-backend (API + Supabase) en een n8n-workflow die DEGIRO-orders
 automatisch uit Gmail haalt.
 
 ## Starten
@@ -103,8 +103,11 @@ hoe je 'm zelf controleert.
 
 ## Backend (Vercel) — wat je zelf moet instellen
 
-Net als bij Portfolio: **Vercel → Storage → Upstash Redis** toevoegen aan dit
-project (genereert automatisch `KV_REST_API_URL` en `KV_REST_API_TOKEN`).
+Database: **Supabase** (Postgres). Maak een project op supabase.com, plak
+`supabase/schema.sql` in de SQL Editor en run het. Zet daarna in Vercel de
+variabelen `SUPABASE_URL` (Project Settings → API → Project URL) en
+`SUPABASE_SERVICE_ROLE_KEY` (zelfde pagina, "service_role"). Die laatste is geheim:
+nooit in de repo of in de frontend zetten.
 
 Daarnaast deze environment variables toevoegen in **Vercel → Settings →
 Environment Variables** (Production + Preview):

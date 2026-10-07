@@ -1,9 +1,9 @@
 import React from 'react';
-import { LayoutDashboard, ArrowLeftRight, Info, LogOut, Sun, Moon, Monitor } from 'lucide-react';
+import { LayoutDashboard, ArrowLeftRight, Activity, Info, LogOut, Sun, Moon, Monitor } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme.ts';
 import { DemoReason } from '../hooks/usePortfolioData.ts';
 
-export type Page = 'overzicht' | 'transacties';
+export type Page = 'overzicht' | 'transacties' | 'koersen';
 
 interface NavProps {
   page: Page;
@@ -20,6 +20,10 @@ export const Nav: React.FC<NavProps> = ({ page, onNavigate, isDemo, demoReason }
   const items: { id: Page; label: string; icon: React.ReactNode }[] = [
     { id: 'overzicht', label: 'Overzicht', icon: <LayoutDashboard className="w-4 h-4" aria-hidden="true" /> },
     { id: 'transacties', label: 'Transacties', icon: <ArrowLeftRight className="w-4 h-4" aria-hidden="true" /> },
+    // Alleen in de demo-versie. De echte versie volgt later.
+    ...(isDemo
+      ? [{ id: 'koersen' as Page, label: 'Koersen', icon: <Activity className="w-4 h-4" aria-hidden="true" /> }]
+      : []),
   ];
 
   return (

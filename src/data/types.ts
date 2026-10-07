@@ -9,6 +9,26 @@ export interface Stock {
   isin?: string;
 }
 
+/** Waar de koers van één aandeel vandaan komt (zelfde idee als /api/quotes). */
+export type QuoteSource = 'twelvedata' | 'yahoo' | 'transactieprijs';
+
+export interface QuoteInfo {
+  ticker: string;
+  source: QuoteSource;
+  /** Symbool bij de bron, bv. "ASML" of "ADYEN.AS". Leeg bij laatste transactieprijs. */
+  symbol?: string;
+  /** Valuta waarin de bron de koers gaf (vóór omrekenen naar euro) */
+  currency?: string;
+  /** Koers per stuk in euro's */
+  price: number;
+  /** Tijdstip van de koers volgens de bron (ISO), indien bekend */
+  asOf?: string;
+  /** Korte uitleg voor de gebruiker, bv. "Omgerekend van pence" */
+  note?: string;
+  /** Gevuld als de koers sterk afwijkt van de laatste transactieprijs */
+  warning?: string;
+}
+
 export type TransactionType = 'Kopen' | 'Verkopen';
 
 export interface Transaction {

@@ -1,0 +1,199 @@
+{
+  "name": "Beleggingen - DEGIRO backfill (oude orders, eenmalig)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "c1c1c1c1-0001-4000-8000-000000000001",
+      "name": "Start (handmatig)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "getAll",
+        "returnAll": true,
+        "simple": false,
+        "filters": {
+          "q": "from:notificaties@degiro.nl subject:\"Transactiebevestiging\""
+        },
+        "options": {}
+      },
+      "id": "c1c1c1c1-0002-4000-8000-000000000002",
+      "name": "Alle oude DEGIRO-mails",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -420,
+        0
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parseert DEGIRO-transactiebevestigingen (1 of meerdere orders per mail) naar\n// één item per order voor de website. Zelfde logica als de live-workflow, plus:\n//  - meerdere orders in één mail (\"De volgende orders zijn uitgevoerd\")\n//  - sortering oud -> nieuw, zodat de laatste order de huidige prijs bepaalt\n//  - iShares-ETF's krijgen een eigen ticker (anders vallen ze samen onder ISHARES)\n\nconst MONTHS = {\n  jan: '01', feb: '02', mrt: '03', apr: '04', mei: '05', jun: '06',\n  jul: '07', aug: '08', sep: '09', okt: '10', nov: '11', dec: '12',\n};\n\nconst STOPWORDS = new Set([\n  'ltd', 'plc', 'nv', 'n.v.', 'inc', 'sa', 'ag', 'se', 'class', 'a', 'b',\n  'etf', 'ucits', 'dist', 'acc', 'accumulating', 'core', '-', '(usd)', '(eur)',\n]);\n\nfunction deriveTicker(name) {\n  // iShares-fondsen: eerste woord is bij allemaal gelijk, dus ook het tweede gebruiken.\n  if (/^ishares\\b/i.test(name)) {\n    const second = (name.split(/\\s+/).filter((w) => !STOPWORDS.has(w.toLowerCase()))[1] || '');\n    return ('IS' + second.replace(/[^A-Za-z]/g, '').toUpperCase()).slice(0, 6);\n  }\n  const words = name.split(/\\s+/).filter((w) => w && !STOPWORDS.has(w.toLowerCase().replace(/[.,]/g, '')));\n  const base = (words[0] || name.replace(/[^A-Za-z]/g, '')).toUpperCase();\n  return base.slice(0, 6);\n}\n\nconst LABELS = [\n  'OrderID', 'Transactiedatum', 'ISIN', 'Opdracht', 'Type', 'Beurs', 'Handelsplaats',\n  'Aantal', 'Koers', 'Lokale waarde', 'Waarde', 'Wisselkoers', 'AutoFX kosten',\n  'Transactiekosten en/of kosten van derden', 'Totale Kosten', 'Totaal',\n];\n\nfunction extractFields(text) {\n  const found = [];\n  for (const label of LABELS) {\n    const idx = text.indexOf(label);\n    if (idx !== -1) found.push({ label, start: idx, end: idx + label.length });\n  }\n  found.sort((a, b) => a.start - b.start);\n  const fields = {};\n  for (let i = 0; i < found.length; i++) {\n    const to = i + 1 < found.length ? found[i + 1].start : text.length;\n    fields[found[i].label] = text.slice(found[i].end, to).trim();\n  }\n  return fields;\n}\n\nfunction extractBody(json) {\n  if (typeof json.text === 'string' && json.text.length > 0) return json.text;\n  if (typeof json.textPlain === 'string' && json.textPlain.length > 0) return json.textPlain;\n  if (json.payload && json.payload.parts) {\n    const stack = [...json.payload.parts];\n    while (stack.length) {\n      const part = stack.shift();\n      if (part.mimeType === 'text/plain' && part.body && part.body.data) {\n        const b64 = part.body.data.replace(/-/g, '+').replace(/_/g, '/');\n        return Buffer.from(b64, 'base64').toString('utf-8');\n      }\n      if (part.parts) stack.push(...part.parts);\n    }\n  }\n  return typeof json.snippet === 'string' ? json.snippet : '';\n}\n\nfunction extractSubject(json) {\n  if (typeof json.subject === 'string') return json.subject;\n  if (json.payload && Array.isArray(json.payload.headers)) {\n    const h = json.payload.headers.find((h) => h.name && h.name.toLowerCase() === 'subject');\n    if (h) return h.value;\n  }\n  return '';\n}\n\nfunction parseBlock(block, name, subject) {\n  const fields = extractFields(block);\n  const orderId = (fields['OrderID'] || '').split(' ')[0] || null;\n  const isinRaw = (fields['ISIN'] || '').split(' ')[0].toUpperCase();\n  const isin = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(isinRaw) ? isinRaw : null;\n  const txDate = fields['Transactiedatum'] || null;\n  const opdracht = fields['Opdracht'] || null;\n  const aantal = fields['Aantal'] || null;\n  const waarde = fields['Waarde'] || null;\n\n  if (!orderId || !txDate || !opdracht || !aantal || !waarde) {\n    return { recognized: false, subject, reason: `Geen OrderID/Transactiedatum/Opdracht/Aantal/Waarde gevonden voor \"${name}\".` };\n  }\n  const dateMatch = txDate.match(/(\\d{1,2}) (\\w{3})\\w* (\\d{4})(?:,?\\s*(\\d{1,2}:\\d{2}(?::\\d{2})?))?/);\n  const month = dateMatch ? MONTHS[dateMatch[2].toLowerCase()] : null;\n  const type = opdracht.toLowerCase().startsWith('koop') ? 'Kopen' : opdracht.toLowerCase().startsWith('verkoop') ? 'Verkopen' : null;\n  const quantity = parseInt((aantal || '').replace(/\\D/g, ''), 10);\n  const waardeMatch = waarde.match(/EUR\\s*(-?[\\d.,]+)/);\n  if (!dateMatch || !month || !type || !quantity || !waardeMatch) {\n    return { recognized: false, subject, reason: `Order \"${name}\" gevonden maar datum/type/aantal/waarde niet leesbaar.` };\n  }\n  const date = `${dateMatch[3]}-${month}-${dateMatch[1].padStart(2, '0')}`;\n  const time = (dateMatch[4] || '00:00:00').padStart(5, '0');\n  const waardeEUR = Math.abs(parseFloat(waardeMatch[1].replace(/\\./g, '').replace(',', '.')));\n  const price = Math.round((waardeEUR / quantity) * 10000) / 10000;\n  return {\n    recognized: true, orderId, isin, date, ticker: deriveTicker(name), name, type, quantity, price,\n    sortKey: `${date} ${time}`, subject,\n  };\n}\n\nconst results = [];\nfor (const item of items) {\n  const subject = extractSubject(item.json);\n  const body = extractBody(item.json).replace(/&amp;/g, '&').replace(/\\s+/g, ' ');\n\n  // Elke order begint met \"<naam> OrderID\"; de naam staat na \"uitgevoerd:\" of na het \"Totaal\"-bedrag van de vorige order.\n  const re = /(?:uitgevoerd:|Totaal EUR\\s*-?[\\d.,]+)\\s+(.+?)\\s+OrderID\\s/g;\n  const starts = [];\n  let m;\n  while ((m = re.exec(body)) !== null) {\n    starts.push({ name: m[1].trim(), from: m.index + m[0].length - 'OrderID '.length, at: m.index });\n  }\n  if (!starts.length) {\n    results.push({ json: { recognized: false, subject, reason: 'Geen order (naam + OrderID) gevonden in de mail.' } });\n    continue;\n  }\n  for (let i = 0; i < starts.length; i++) {\n    const to = i + 1 < starts.length ? starts[i + 1].at : body.length;\n    results.push({ json: parseBlock(body.slice(starts[i].from, to), starts[i].name, subject) });\n  }\n}\n\n// Oud -> nieuw (niet-herkende items achteraan).\nresults.sort((a, b) => {\n  if (a.json.recognized !== b.json.recognized) return a.json.recognized ? -1 : 1;\n  return String(a.json.sortKey || '').localeCompare(String(b.json.sortKey || ''));\n});\nreturn results;\n"
+      },
+      "id": "c1c1c1c1-0003-4000-8000-000000000003",
+      "name": "Mail parsen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "b1b1b1b1-0001-4000-8000-000000000001",
+              "leftValue": "={{ $json.recognized }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c1c1c1c1-0004-4000-8000-000000000004",
+      "name": "Order herkend?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        20,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://JOUW-BELEGGINGEN-DOMEIN.vercel.app/api/transactions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { orderId: $json.orderId, isin: $json.isin, date: $json.date, ticker: $json.ticker, name: $json.name, type: $json.type, quantity: $json.quantity, price: $json.price } }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 300
+            }
+          }
+        }
+      },
+      "id": "c1c1c1c1-0005-4000-8000-000000000005",
+      "name": "Naar website sturen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        -100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "DEGIRO webhook key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "mdadevries@gmail.com",
+        "subject": "=n8n backfill: DEGIRO-mail niet herkend — {{$json.subject}}",
+        "message": "=Deze DEGIRO-mail kon niet verwerkt worden:\n\nOnderwerp: {{$json.subject}}\nReden: {{$json.reason}}",
+        "options": {}
+      },
+      "id": "c1c1c1c1-0006-4000-8000-000000000006",
+      "name": "Melding bij fout",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        260,
+        120
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Start (handmatig)": {
+      "main": [
+        [
+          {
+            "node": "Alle oude DEGIRO-mails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alle oude DEGIRO-mails": {
+      "main": [
+        [
+          {
+            "node": "Mail parsen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mail parsen": {
+      "main": [
+        [
+          {
+            "node": "Order herkend?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order herkend?": {
+      "main": [
+        [
+          {
+            "node": "Naar website sturen",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Melding bij fout",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

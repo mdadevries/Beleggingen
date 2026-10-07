@@ -6,6 +6,8 @@ import { AllocationBar } from './components/AllocationBar.tsx';
 import { ValueChart } from './components/ValueChart.tsx';
 import { RecentTransactions } from './components/RecentTransactions.tsx';
 import { TransactionsTable } from './components/TransactionsTable.tsx';
+import { QuoteFlow, QuoteSourcesTable } from './components/QuoteSources.tsx';
+import { DEMO_QUOTES } from './data/demoData.ts';
 import { usePortfolioData } from './hooks/usePortfolioData.ts';
 import { computePositions, computeTotals, computeValueOverTime } from './utils/portfolio.ts';
 
@@ -27,6 +29,9 @@ export default function App() {
   const [page, setPage] = useState<Page>('overzicht');
   const { stocks, transactions, isDemo, demoReason, loading, quoteStatus } = usePortfolioData();
 
+  // De Koersen-pagina bestaat alleen in de demo-versie.
+  const activePage: Page = page === 'koersen' && !isDemo ? 'overzicht' : page;
+
   const positions = useMemo(() => computePositions(stocks, transactions), [stocks, transactions]);
   const totals = useMemo(() => computeTotals(positions), [positions]);
   const valuePoints = useMemo(() => computeValueOverTime(stocks, transactions), [stocks, transactions]);
@@ -44,10 +49,22 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Nav page={page} onNavigate={setPage} isDemo={isDemo} demoReason={demoReason} />
+      <Nav page={activePage} onNavigate={setPage} isDemo={isDemo} demoReason={demoReason} />
 
       <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-5">
-        {page === 'overzicht' ? (
+        {activePage === 'koersen' ? (
+          <>
+            <Card
+              title="Zo komen de koersen binnen"
+              subtitle="Voorbeeld in de demo. In de echte versie komt dit uit /api/quotes."
+            >
+              <QuoteFlow />
+            </Card>
+            <Card title="Koersen per aandeel" subtitle="Demodata: vier situaties die kunnen voorkomen">
+              <QuoteSourcesTable stocks={stocks} quotes={DEMO_QUOTES} />
+            </Card>
+          </>
+        ) : activePage === 'overzicht' ? (
           <>
             <KpiRow totals={totals} showInvested={showInvested} />
             {!isDemo && <QuoteNote status={quoteStatus} />}

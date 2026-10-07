@@ -1,15 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { Redis } from '@upstash/redis';
 import crypto from 'crypto';
 
-// Opslag:
-//   hash "transactions"  key = OrderID (DEGIRO) of een gegenereerde id -> JSON-string Transaction
-//   hash "stocks"        key = ticker -> JSON-string Stock
-// OrderID als sleutel zorgt dat dezelfde mail nooit twee keer als transactie verschijnt,
-// ook als n8n 'm per ongeluk twee keer verwerkt.
+// Opslag: Supabase (Postgres), tabellen "transactions" en "stocks"
+// (zie supabase/schema.sql). Praat via de REST-API met fetch, geen extra pakket.
+// OrderID (DEGIRO) is de primaire sleutel van "transactions": dezelfde mail kan
+// dus nooit twee keer als transactie verschijnen, ook niet als n8n 'm dubbel verwerkt.
 
-const TRANSACTIONS_KEY = 'transactions';
-const STOCKS_KEY = 'stocks';
 const COLOR_SLOTS = [1, 2, 3, 4, 5] as const;
 
 interface StoredStock {
@@ -58,13 +54,42 @@ interface StoredTransaction {
   price: number;
 }
 
-function getRedis(): Redis {
-  const url = process.env.KV_REST_API_URL;
-  const token = process.env.KV_REST_API_TOKEN;
-  if (!url || !token) {
-    throw new Error('KV_REST_API_URL / KV_REST_API_TOKEN ontbreken in de environment variables.');
+type Db = (path: string, init?: { method?: string; body?: unknown; prefer?: string }) => Promise<any>;
+
+function getDb(): Db {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    throw new Error('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY ontbreken in de environment variables.');
   }
-  return new Redis({ url, token });
+  const base = url.replace(/\/$/, '') + '/rest/v1';
+  return async (path, init = {}) => {
+    const r = await fetch(base + path, {
+      method: init.method ?? 'GET',
+      headers: {
+        apikey: key,
+        // Nieuwe 'sb_secret_...'-sleutels zijn geen JWT: die gaan alleen in 'apikey'.
+        ...(key.startsWith('sb_') ? {} : { Authorization: `Bearer ${key}` }),
+        'Content-Type': 'application/json',
+        ...(init.prefer ? { Prefer: init.prefer } : {}),
+      },
+      body: init.body === undefined ? undefined : JSON.stringify(init.body),
+    });
+    if (!r.ok) throw new Error(`Supabase ${r.status}: ${(await r.text()).slice(0, 200)}`);
+    const text = await r.text();
+    return text ? JSON.parse(text) : null;
+  };
+}
+
+function toStock(r: any): StoredStock {
+  return {
+    ticker: r.ticker,
+    name: r.name,
+    currentPrice: Number(r.current_price),
+    colorSlot: r.color_slot,
+    ...(r.isin ? { isin: r.isin } : {}),
+    ...(r.symbol ? { symbol: r.symbol } : {}),
+  };
 }
 
 function timingSafeEqual(a: string, b: string): boolean {
@@ -83,9 +108,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  let redis: Redis;
+  let db: Db;
   try {
-    redis = getRedis();
+    db = getDb();
   } catch (err) {
     res.status(500).json({ error: 'Database niet geconfigureerd op de server.' });
     return;
@@ -97,16 +122,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
     try {
-      const [txRaw, stockRaw] = await Promise.all([
-        redis.hgetall<Record<string, string>>(TRANSACTIONS_KEY),
-        redis.hgetall<Record<string, string>>(STOCKS_KEY),
+      const [txRows, stockRows] = await Promise.all([
+        db('/transactions?select=id,date,ticker,type,quantity,price&order=date.asc,id.asc'),
+        db('/stocks?select=*'),
       ]);
-      const transactions: StoredTransaction[] = Object.values(txRaw || {}).map((v) =>
-        typeof v === 'string' ? JSON.parse(v) : (v as unknown as StoredTransaction)
-      );
-      const stocks: StoredStock[] = Object.values(stockRaw || {}).map((v) =>
-        typeof v === 'string' ? JSON.parse(v) : (v as unknown as StoredStock)
-      );
+      const transactions: StoredTransaction[] = (txRows ?? []).map((r: any) => ({
+        id: r.id,
+        date: r.date,
+        ticker: r.ticker,
+        type: r.type,
+        quantity: Number(r.quantity),
+        price: Number(r.price),
+      }));
+      const stocks: StoredStock[] = (stockRows ?? []).map(toStock);
       res.status(200).json({ transactions, stocks });
     } catch (err) {
       res.status(500).json({ error: 'Kon transacties niet ophalen.' });
@@ -158,51 +186,60 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const tickerKey = ticker.trim().toUpperCase();
 
-      // Dedup: dezelfde order-mail twee keer verwerkt mag geen dubbele transactie geven.
-      // Wel vullen we dan een ontbrekende ISIN aan op het aandeel (zo kan een
-      // order van vóór de ISIN-koppeling alsnog een echte koers krijgen).
-      const alreadyExists = await redis.hexists(TRANSACTIONS_KEY, orderId);
-      if (alreadyExists) {
+      // Dedup: dezelfde order-mail twee keer verwerkt mag geen dubbele transactie geven
+      // en mag de huidige prijs niet terugzetten. Wel vullen we dan een ontbrekende ISIN
+      // aan op het aandeel (zo kan een oudere order alsnog een echte koers opleveren).
+      const dup = await db(`/transactions?select=id&id=eq.${encodeURIComponent(orderId)}`);
+      if (dup && dup.length > 0) {
         if (isin) {
-          const raw = await redis.hget<string>(STOCKS_KEY, tickerKey);
-          if (raw) {
-            const st: StoredStock = typeof raw === 'string' ? JSON.parse(raw) : (raw as unknown as StoredStock);
-            if (!st.isin) {
-              await redis.hset(STOCKS_KEY, { [tickerKey]: JSON.stringify({ ...st, isin }) });
-            }
-          }
+          await db(`/stocks?ticker=eq.${encodeURIComponent(tickerKey)}&isin=is.null`, {
+            method: 'PATCH',
+            body: { isin },
+          });
         }
         res.status(200).json({ ok: true, id: orderId, duplicate: true });
         return;
       }
 
-      // Stock upserten: nieuw aandeel krijgt een volgende kleurslot, bestaande
-      // krijgt zijn 'currentPrice' bijgewerkt naar de laatst bekende transactieprijs
-      // (geen live koers-feed in v1 — dat is een bewuste latere uitbreiding).
-      const existingStockRaw = await redis.hget<string>(STOCKS_KEY, tickerKey);
-      let stock: StoredStock;
-      if (existingStockRaw) {
-        const existing: StoredStock = typeof existingStockRaw === 'string' ? JSON.parse(existingStockRaw) : (existingStockRaw as unknown as StoredStock);
-        stock = { ...existing, name: name?.trim() || existing.name, currentPrice: price, isin: existing.isin ?? isin };
+      // Bestaand aandeel ophalen (kleurslot, ISIN, symbool blijven behouden).
+      const existingRows = await db(`/stocks?select=*&ticker=eq.${encodeURIComponent(tickerKey)}`);
+      const existing: StoredStock | null = existingRows?.length ? toStock(existingRows[0]) : null;
+
+      // Nieuw aandeel krijgt een volgende kleurslot, bestaand krijgt zijn
+      // 'currentPrice' bijgewerkt naar de laatst bekende transactieprijs.
+      let stockRow: Record<string, unknown>;
+      if (existing) {
+        stockRow = {
+          ticker: tickerKey,
+          name: name?.trim() || existing.name,
+          current_price: price,
+          color_slot: existing.colorSlot,
+          isin: existing.isin ?? isin ?? null,
+          symbol: existing.symbol ?? null,
+        };
       } else {
-        const stockCount = await redis.hlen(STOCKS_KEY);
-        const colorSlot = COLOR_SLOTS[stockCount % COLOR_SLOTS.length];
-        stock = { ticker: tickerKey, name: (name && String(name).trim()) || tickerKey, currentPrice: price, colorSlot, ...(isin ? { isin } : {}) };
+        const all = await db('/stocks?select=ticker');
+        stockRow = {
+          ticker: tickerKey,
+          name: (name && String(name).trim()) || tickerKey,
+          current_price: price,
+          color_slot: COLOR_SLOTS[(all?.length ?? 0) % COLOR_SLOTS.length],
+          isin: isin ?? null,
+          symbol: null,
+        };
       }
+      await db('/stocks?on_conflict=ticker', { method: 'POST', body: stockRow, prefer: 'resolution=merge-duplicates' });
 
-      const transaction: StoredTransaction = {
-        id: orderId,
-        date,
-        ticker: tickerKey,
-        type,
-        quantity,
-        price,
-      };
-
-      await Promise.all([
-        redis.hset(TRANSACTIONS_KEY, { [orderId]: JSON.stringify(transaction) }),
-        redis.hset(STOCKS_KEY, { [tickerKey]: JSON.stringify(stock) }),
-      ]);
+      // Gelijktijdige dubbele aanvraag: 'ignore-duplicates' geeft een lege lijst terug.
+      const inserted = await db('/transactions?on_conflict=id', {
+        method: 'POST',
+        body: { id: orderId, date, ticker: tickerKey, type, quantity, price },
+        prefer: 'resolution=ignore-duplicates,return=representation',
+      });
+      if (!inserted || inserted.length === 0) {
+        res.status(200).json({ ok: true, id: orderId, duplicate: true });
+        return;
+      }
 
       res.status(200).json({ ok: true, id: orderId, duplicate: false });
     } catch (err) {

@@ -1,4 +1,4 @@
-import { Stock, Transaction } from './types.ts';
+import { QuoteInfo, Stock, Transaction } from './types.ts';
 
 // Demodata — geen koppeling met een echte broker of bankrekening (zie
 // privacy-overweging: voor de eerste versie tonen we alleen voorbeelddata).
@@ -8,7 +8,41 @@ export const DEMO_STOCKS: Stock[] = [
   { ticker: 'SHELL', name: 'Shell plc', currentPrice: 31.5, colorSlot: 2 },
   { ticker: 'ING', name: 'ING Groep', currentPrice: 16.8, colorSlot: 3 },
   { ticker: 'ADYEN', name: 'Adyen', currentPrice: 1650, colorSlot: 4 },
-  { ticker: 'PROSUS', name: 'Prosus', currentPrice: 38.2, colorSlot: 5 },
+  // Prosus staat in de demo op de laatste transactieprijs (zie DEMO_QUOTES).
+  { ticker: 'PROSUS', name: 'Prosus', currentPrice: 37.4, colorSlot: 5 },
+];
+
+// Voorbeeld van hoe /api/quotes per aandeel antwoordt. Puur demo: een
+// demo-sessie roept /api/quotes nooit aan. Alle vier de situaties komen voor:
+// Twelve Data, omrekenen van pence, Yahoo als reserve, en terugval op de
+// laatste transactieprijs.
+export const DEMO_QUOTES: QuoteInfo[] = [
+  { ticker: 'ASML', source: 'twelvedata', symbol: 'ASML', currency: 'EUR', price: 780, asOf: '2026-10-05T13:28:00Z' },
+  {
+    ticker: 'SHELL',
+    source: 'twelvedata',
+    symbol: 'SHEL',
+    currency: 'GBp',
+    price: 31.5,
+    asOf: '2026-10-05T13:28:00Z',
+    note: 'Koers in pence, omgerekend naar euro',
+  },
+  { ticker: 'ING', source: 'twelvedata', symbol: 'INGA', currency: 'EUR', price: 16.8, asOf: '2026-10-05T13:28:00Z' },
+  {
+    ticker: 'ADYEN',
+    source: 'yahoo',
+    symbol: 'ADYEN.AS',
+    currency: 'EUR',
+    price: 1650,
+    asOf: '2026-10-05T13:25:00Z',
+    note: 'Twelve Data gaf hier geen koers, Yahoo sprong bij',
+  },
+  {
+    ticker: 'PROSUS',
+    source: 'transactieprijs',
+    price: 37.4,
+    note: 'Geen live koers gevonden, dit is je laatste transactieprijs',
+  },
 ];
 
 export const DEMO_TRANSACTIONS: Transaction[] = [
