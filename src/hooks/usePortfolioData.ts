@@ -62,6 +62,7 @@ export function usePortfolioData(): PortfolioData {
 
   useEffect(() => {
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
     fetch('/api/session')
       .then((res) => (res.ok ? res.json() : { role: 'real' }))
@@ -126,7 +127,12 @@ export function usePortfolioData(): PortfolioData {
      * bijgewerkt. Faalt dat (Yahoo weg, niet gevonden), dan blijft alles zoals
      * het was en zegt quoteStatus dat eerlijk.
      */
-    function loadQuotes(stocks: Stock[]) {
+    function loadQuotes(stocks: Stock[], attempt = 0) {
+      // Zijn nog niet alle koersen binnen (het gratis koersenbudget is per minuut beperkt),
+      // dan vragen we na ruim een minuut nog een paar keer opnieuw.
+      const retryLater = () => {
+        if (attempt < 3 && !cancelled) timer = setTimeout(() => loadQuotes(stocks, attempt + 1), 65_000);
+      };
       fetch('/api/quotes')
         .then((res) => {
           if (!res.ok) throw new Error(`Status ${res.status}`);
@@ -163,15 +169,20 @@ export function usePortfolioData(): PortfolioData {
             stocks: st.stocks.map((s) => (quotes[s.ticker] ? { ...s, currentPrice: quotes[s.ticker].price } : s)),
             quoteStatus: { live, total: stocks.length, asOf },
           }));
+          // Ook nog eens vragen als dividend nog voor sommige aandelen ontbreekt: dat komt per ronde een paar tegelijk binnen.
+          const dividendPending = stocks.some((s) => quotes[s.ticker] && quotes[s.ticker].dividends === undefined);
+          if (live < stocks.length || dividendPending) retryLater();
         })
         .catch(() => {
           if (cancelled) return;
-          setState((st) => ({ ...st, quoteStatus: { live: 0, total: stocks.length, asOf: null } }));
+          setState((st) => (st.quoteStatus && st.quoteStatus.live > 0 ? st : { ...st, quoteStatus: { live: 0, total: stocks.length, asOf: null } }));
+          retryLater();
         });
     }
 
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
   }, []);
 

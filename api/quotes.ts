@@ -15,17 +15,28 @@ import crypto from 'crypto';
 // compileert elk bestand onder /api los, relatieve imports bestaan op de
 // server niet. Houd de auth-constanten gelijk aan de andere /api-bestanden.
 
-const CACHE_KEY = 'quotes:v4';
-const CACHE_TTL_SECONDS = 300; // 5 minuten
+// Per aandeel bewaren we de laatste koers in de database (tabel quote_cache). Zo hoeft
+// niet elke pagina-laad alle bronnen te bestoken en vult het overzicht zich ronde voor
+// ronde als het Twelve Data-budget (8 per minuut) niet voor alle aandelen genoeg is.
+const CACHE_PREFIX = 'quote:v1:';
+const CREDITS_KEY = 'td-credits:v1';
+const FRESH_MS = 5 * 60 * 1000; // zo lang geldt een koers als "vers"
+const MAX_STALE_MS = 12 * 60 * 60 * 1000; // oudere koers dan dit tonen we niet meer
+const DIVIDEND_RETRY_MS = 3 * 60 * 60 * 1000;
+const YAHOO_CALLS_PER_RUN = 5;
+const KEEP_DAYS = 30;
 const REQUEST_TIMEOUT_MS = 3500;
 
 const TD = 'https://api.twelvedata.com';
 const YAHOO = 'https://query1.finance.yahoo.com';
+const YAHOO2 = 'https://query2.finance.yahoo.com';
+const FRANKFURTER = 'https://api.frankfurter.dev/v1/latest';
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
 // Twelve Data Basic: 8 credits per minuut. Een koers kost 1 credit, een
-// wisselkoers ook. Boven dit budget gaat een aandeel direct naar Yahoo.
-const TD_CREDITS_PER_RUN = 7;
+// wisselkoers ook (die halen we daarom eerst bij de gratis ECB-koersen). Boven dit
+// budget gaat een aandeel naar Yahoo of wacht het op de volgende ronde.
+const TD_CREDITS_PER_MINUTE = 8;
 
 // Afwijking t.o.v. laatste transactieprijs waarbij we "controleer" tonen.
 const WARN_DEVIATION = 0.15;
@@ -149,15 +160,20 @@ function errMsg(e: unknown): string {
 
 // ---------- Twelve Data ----------
 
-/** Per aanroep van de handler maximaal TD_CREDITS_PER_RUN credits uitgeven. */
-function makeBudget() {
-  let left = TD_CREDITS_PER_RUN;
-  return () => {
-    if (left > 0) {
-      left--;
-      return true;
-    }
-    return false;
+/** Telt hoeveel Twelve Data-credits we in deze ronde nog mogen uitgeven. */
+function makeBudget(left: number) {
+  let remaining = Math.max(0, left);
+  let used = 0;
+  return {
+    take: () => {
+      if (remaining > 0) {
+        remaining--;
+        used++;
+        return true;
+      }
+      return false;
+    },
+    used: () => used,
   };
 }
 
@@ -248,10 +264,14 @@ async function tdRate(cur: string): Promise<number> {
 // ---------- Yahoo (reserve) ----------
 
 async function yahooJson(path: string): Promise<any> {
-  const res = await fetch(`${YAHOO}${path}`, {
-    headers: { 'User-Agent': UA, Accept: 'application/json' },
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
+  const get = (host: string) =>
+    fetch(`${host}${path}`, {
+      headers: { 'User-Agent': UA, Accept: 'application/json', 'Accept-Language': 'en-US,en;q=0.9' },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  let res = await get(YAHOO);
+  // Yahoo geeft vanaf servers vaak 429; de tweede host heeft soms een andere limiet.
+  if (res.status === 429) res = await get(YAHOO2);
   if (!res.ok) throw new Error(`Yahoo status ${res.status}`);
   return res.json();
 }
@@ -340,6 +360,18 @@ async function yahooQuote(stock: StoredStock, db: Db): Promise<RawQuote> {
 
 // ---------- Omrekenen en samenvoegen ----------
 
+async function ecbRate(cur: string): Promise<number> {
+  const res = await fetch(`${FRANKFURTER}?base=EUR&symbols=${encodeURIComponent(cur)}`, {
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(`ECB-koers status ${res.status}`);
+  const data: any = await res.json();
+  const rate = Number(data?.rates?.[cur]);
+  if (!Number.isFinite(rate) || !(rate > 0)) throw new Error('Geen bruikbare ECB-wisselkoers');
+  return rate;
+}
+
 async function toEuro(
   amount: number,
   currency: string,
@@ -356,9 +388,11 @@ async function toEuro(
   if (cur === 'EUR') return value;
 
   if (!fxCache.has(cur)) {
+    // EUR/USD = hoeveel USD je voor 1 EUR krijgt (zelfde bij ECB, Twelve Data en Yahoo).
+    // Eerst de gratis ECB-koersen (kost geen Twelve Data-credit), dan Yahoo, dan Twelve Data.
+    const viaTd = () => (takeCredit() ? tdRate(cur) : Promise.reject(new Error('Geen wisselkoers beschikbaar')));
     const viaYahoo = () => yahooChart(`EUR${cur}=X`).then((m) => m.price);
-    // EUR/USD = hoeveel USD je voor 1 EUR krijgt (zelfde bij Twelve Data en Yahoo).
-    fxCache.set(cur, takeCredit() ? tdRate(cur).catch(viaYahoo) : viaYahoo());
+    fxCache.set(cur, ecbRate(cur).catch(viaYahoo).catch(viaTd));
   }
   const rate = await fxCache.get(cur)!;
   return value / rate;
@@ -368,7 +402,8 @@ async function quoteForStock(
   stock: StoredStock,
   db: Db,
   fxCache: Map<string, Promise<number>>,
-  takeCredit: () => boolean
+  takeCredit: () => boolean,
+  takeYahoo: () => boolean
 ): Promise<Quote> {
   let raw: RawQuote | null = null;
   let source: Quote['source'] = 'twelvedata';
@@ -387,6 +422,7 @@ async function quoteForStock(
   if (!raw) {
     source = 'yahoo';
     try {
+      if (!takeYahoo()) throw new Error('Yahoo-budget van deze ronde op, volgende ronde opnieuw');
       raw = await yahooQuote(stock, db);
     } catch (e) {
       throw new Error(`${tdError || 'Twelve Data niet gebruikt'}; ${errMsg(e)}`);
@@ -416,24 +452,6 @@ async function quoteForStock(
     }
   }
 
-  // Dividend van het afgelopen jaar via Yahoo (ook als de koers van Twelve Data kwam).
-  let dividends: Quote['dividends'];
-  try {
-    let ySymbol: string | null | undefined = source === 'yahoo' ? raw.symbol : stock.symbol;
-    if (!ySymbol && stock.isin) ySymbol = await yahooResolveIsin(stock.isin);
-    if (ySymbol) {
-      const d = await yahooDividends(ySymbol);
-      const out: { date: string; amount: number }[] = [];
-      for (const item of d.items) {
-        const eurAmount = await toEuro(item.amount, d.currency, fxCache, takeCredit);
-        out.push({ date: item.date, amount: Math.round(eurAmount * 10000) / 10000 });
-      }
-      dividends = out;
-    }
-  } catch {
-    dividends = undefined; // bijzaak
-  }
-
   return {
     price,
     symbol: raw.symbol,
@@ -445,8 +463,33 @@ async function quoteForStock(
     changePct: raw.changePct ?? null,
     range52,
     exchange: raw.exchange ?? null,
-    ...(dividends ? { dividends } : {}),
   };
+}
+
+/** Dividend van het afgelopen jaar via Yahoo, omgerekend naar euro. Bijzaak: mislukt dit, dan blijft het leeg. */
+async function dividendsFor(
+  stock: StoredStock,
+  quote: Quote,
+  fxCache: Map<string, Promise<number>>,
+  takeCredit: () => boolean
+): Promise<{ date: string; amount: number }[]> {
+  let ySymbol: string | null | undefined = quote.source === 'yahoo' ? quote.symbol : stock.symbol;
+  if (!ySymbol && stock.isin) ySymbol = await yahooResolveIsin(stock.isin);
+  if (!ySymbol) throw new Error('Geen Yahoo-symbool bekend');
+  const d = await yahooDividends(ySymbol);
+  const out: { date: string; amount: number }[] = [];
+  for (const item of d.items) {
+    const eur = await toEuro(item.amount, d.currency, fxCache, takeCredit);
+    out.push({ date: item.date, amount: Math.round(eur * 10000) / 10000 });
+  }
+  return out;
+}
+
+interface CacheEntry {
+  fetchedAt: string;
+  quote: Quote;
+  /** Laatste poging om dividend op te halen (ISO), zodat we niet blijven proberen */
+  divTriedAt?: string;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -473,47 +516,124 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const stockRows = await db('/stocks?select=*');
     const stocks: StoredStock[] = (stockRows ?? []).map(toStock);
-    const tickers = stocks.map((s) => s.ticker).sort();
+    const now = Date.now();
 
-    // Korte cache, alleen geldig voor precies deze set aandelen.
-    const cacheRows = await db(
-      `/quote_cache?select=body&key=eq.${CACHE_KEY}&expires_at=gt.${encodeURIComponent(new Date().toISOString())}`
-    ).catch(() => null);
-    const cached: { tickers: string[]; body: QuotesResponse } | null = cacheRows?.[0]?.body ?? null;
-    if (cached && JSON.stringify(cached.tickers) === JSON.stringify(tickers)) {
-      res.status(200).json(cached.body);
-      return;
+    // Wat we per aandeel al hebben (vorige rondes) en hoeveel Twelve Data-credits er deze minuut nog zijn.
+    const cacheRows: any[] =
+      (await db(`/quote_cache?select=key,body&key=like.${encodeURIComponent(CACHE_PREFIX + '*')}`).catch(() => null)) ?? [];
+    const cache = new Map<string, CacheEntry>();
+    for (const row of cacheRows) {
+      const e = row?.body as CacheEntry | undefined;
+      if (typeof row?.key === 'string' && e?.quote && typeof e.fetchedAt === 'string') {
+        cache.set(row.key.slice(CACHE_PREFIX.length), e);
+      }
     }
+    const creditRows: any[] =
+      (await db(`/quote_cache?select=body&key=eq.${CREDITS_KEY}`).catch(() => null)) ?? [];
+    const prev = creditRows[0]?.body as { windowStart?: number; used?: number } | undefined;
+    const inWindow = prev?.windowStart !== undefined && now - prev.windowStart < 60_000;
+    const usedBefore = inWindow ? Number(prev?.used ?? 0) : 0;
+    const budget = makeBudget(TD_CREDITS_PER_MINUTE - usedBefore);
+    let yahooLeft = YAHOO_CALLS_PER_RUN;
+    const takeYahoo = () => {
+      if (yahooLeft <= 0) return false;
+      yahooLeft--;
+      return true;
+    };
+
+    const ageOf = (t: string) => now - new Date(t).getTime();
+    // Verversen: alles zonder verse koers, het oudste (of ontbrekende) eerst.
+    const need = stocks
+      .filter((s) => {
+        const e = cache.get(s.ticker);
+        return !e || ageOf(e.fetchedAt) > FRESH_MS;
+      })
+      .sort((a, b) => {
+        const ea = cache.get(a.ticker);
+        const eb = cache.get(b.ticker);
+        return (eb ? ageOf(eb.fetchedAt) : Infinity) - (ea ? ageOf(ea.fetchedAt) : Infinity);
+      });
 
     const fxCache = new Map<string, Promise<number>>();
-    const takeCredit = makeBudget();
-    const results = await Promise.allSettled(stocks.map((s) => quoteForStock(s, db, fxCache, takeCredit)));
+    const results = await Promise.allSettled(need.map((s) => quoteForStock(s, db, fxCache, budget.take, takeYahoo)));
 
-    const body: QuotesResponse = { quotes: {}, failed: [], fetchedAt: new Date().toISOString() };
+    const body: QuotesResponse = { quotes: {}, failed: [], fetchedAt: new Date(now).toISOString() };
+    const toSave = new Map<string, { key: string; body: unknown; expires_at: string }>();
+    const expires = new Date(now + KEEP_DAYS * 24 * 3600 * 1000).toISOString();
+    const save = (ticker: string, entry: CacheEntry) =>
+      toSave.set(ticker, { key: CACHE_PREFIX + ticker, body: entry, expires_at: expires });
+    const reason = new Map<string, string>();
     results.forEach((r, i) => {
-      const ticker = stocks[i].ticker;
-      if (r.status === 'fulfilled') body.quotes[ticker] = r.value;
-      else body.failed.push({ ticker, reason: errMsg(r.reason) });
+      const s = need[i];
+      if (r.status === 'fulfilled') {
+        const prevEntry = cache.get(s.ticker);
+        const entry: CacheEntry = {
+          fetchedAt: new Date(now).toISOString(),
+          quote: { ...r.value, ...(prevEntry?.quote.dividends ? { dividends: prevEntry.quote.dividends } : {}) },
+          ...(prevEntry?.divTriedAt ? { divTriedAt: prevEntry.divTriedAt } : {}),
+        };
+        cache.set(s.ticker, entry);
+        save(s.ticker, entry);
+        console.log(
+          `[quotes] ${s.ticker}: ok via ${r.value.source} (${r.value.symbol}, ${r.value.currency}, ${r.value.matchedBy})${r.value.warning ? ' WAARSCHUWING: ' + r.value.warning : ''}`
+        );
+      } else {
+        reason.set(s.ticker, errMsg(r.reason));
+        console.log(`[quotes] ${s.ticker}: MISLUKT - ${errMsg(r.reason)} [${s.name}${s.isin ? ', ' + s.isin : ', geen ISIN'}]`);
+      }
     });
 
-    // Eén regel per aandeel in de Vercel-logs: zo zie je waarom een koers (niet) lukte.
-    // Bevat geen sleutels of bedragen van jou, alleen ticker, bron en foutmelding.
-    for (const [ticker, q] of Object.entries(body.quotes)) {
-      console.log(`[quotes] ${ticker}: ok via ${q.source} (${q.symbol}, ${q.currency}, ${q.matchedBy})${q.warning ? ' WAARSCHUWING: ' + q.warning : ''}${q.dividends ? ` dividend:${q.dividends.length}` : ' dividend:onbekend'}`);
+    // Dividend ophalen voor aandelen met een koers, maar rustig aan: hooguit 2 per ronde,
+    // en alleen als de ronde nog niet te lang duurt (Vercel kapt functies na een tijdje af).
+    if (Date.now() - now < 5000) {
+      const divTodo = stocks
+        .filter((s) => {
+          const e = cache.get(s.ticker);
+          return e && !(e.divTriedAt && ageOf(e.divTriedAt) < DIVIDEND_RETRY_MS);
+        })
+        .slice(0, 2)
+        .filter(() => takeYahoo());
+      await Promise.all(
+        divTodo.map(async (s) => {
+          const e = cache.get(s.ticker)!;
+          try {
+            e.quote = { ...e.quote, dividends: await dividendsFor(s, e.quote, fxCache, budget.take) };
+            console.log(`[quotes] ${s.ticker}: dividend ${e.quote.dividends?.length ?? 0} uitkeringen`);
+          } catch (err) {
+            console.log(`[quotes] ${s.ticker}: dividend niet beschikbaar - ${errMsg(err)}`);
+          }
+          e.divTriedAt = new Date(now).toISOString();
+          save(s.ticker, e);
+        })
+      );
     }
-    for (const f of body.failed) console.log(`[quotes] ${f.ticker}: MISLUKT - ${f.reason}`);
 
-    // Bij (deels) mislukte ronde maar kort cachen: een tijdelijke hapering
-    // mag niet 5 minuten blijven hangen, maar een onvindbaar aandeel mag de
-    // bronnen ook niet bij elke paginalaad opnieuw bestoken.
-    const ttl = body.failed.length === 0 ? CACHE_TTL_SECONDS : 60;
-    await db('/quote_cache?on_conflict=key', {
-      method: 'POST',
-      body: { key: CACHE_KEY, body: { tickers, body }, expires_at: new Date(Date.now() + ttl * 1000).toISOString() },
-      prefer: 'resolution=merge-duplicates',
-    }).catch(() => undefined); // cache is bijzaak: mislukt opslaan mag de koersen niet breken
+    // Antwoord: verse koersen, anders de laatste bekende (tot 12 uur oud).
+    for (const s of stocks) {
+      const e = cache.get(s.ticker);
+      if (e && ageOf(e.fetchedAt) <= MAX_STALE_MS) body.quotes[s.ticker] = e.quote;
+      else body.failed.push({ ticker: s.ticker, reason: reason.get(s.ticker) ?? 'Nog geen koers binnen' });
+    }
+
+    // Opslaan (bijzaak: mislukt dit, dan werkt het overzicht gewoon).
+    const rows: { key: string; body: unknown; expires_at: string }[] = [...toSave.values()];
+    if (budget.used() > 0) {
+      rows.push({
+        key: CREDITS_KEY,
+        body: { windowStart: inWindow ? prev!.windowStart! : now, used: usedBefore + budget.used() },
+        expires_at: expires,
+      });
+    }
+    if (rows.length > 0) {
+      await db('/quote_cache?on_conflict=key', {
+        method: 'POST',
+        body: rows,
+        prefer: 'resolution=merge-duplicates',
+      }).catch((err) => console.log(`[quotes] cache opslaan mislukt: ${errMsg(err)}`));
+    }
     res.status(200).json(body);
-  } catch {
+  } catch (err) {
+    console.log(`[quotes] fout: ${errMsg(err)}`);
     res.status(500).json({ error: 'Kon koersen niet ophalen.' });
   }
 }
