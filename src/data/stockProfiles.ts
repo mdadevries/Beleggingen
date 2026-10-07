@@ -12,6 +12,8 @@ export interface StockProfile {
   sector?: string;
   country?: string;
   about: string;
+  /** Vaste feiten, alleen voor ETF's (afgerond; kunnen veranderen, dus altijd met een voorbehoud tonen). */
+  facts?: { label: string; value: string }[];
 }
 
 export const STOCK_PROFILES: StockProfile[] = [
@@ -107,12 +109,24 @@ export const STOCK_PROFILES: StockProfile[] = [
     sector: 'Amerikaanse aandelen',
     country: 'Verenigde Staten',
     about: 'Een ETF die de S&P 500 volgt: de 500 grootste beursgenoteerde bedrijven van de Verenigde Staten.',
+    facts: [
+      { label: 'Index', value: 'S&P 500' },
+      { label: 'Kosten per jaar', value: '0,07%' },
+      { label: 'Aantal bedrijven', value: '± 500' },
+      { label: 'Land van het fonds', value: 'Ierland' },
+    ],
   },
   {
     match: /all-?world|ftse/i,
     kind: 'ETF',
     sector: 'Wereldwijd gespreid',
     about: 'Een ETF met bedrijven uit de hele wereld, ontwikkelde landen én opkomende markten, in één aankoop.',
+    facts: [
+      { label: 'Index', value: 'FTSE All-World' },
+      { label: 'Kosten per jaar', value: '0,19%' },
+      { label: 'Aantal bedrijven', value: '± 3.700' },
+      { label: 'Land van het fonds', value: 'Ierland' },
+    ],
   },
   {
     match: /msci world/i,
@@ -120,6 +134,12 @@ export const STOCK_PROFILES: StockProfile[] = [
     sector: 'Wereldwijd gespreid',
     about:
       'Een ETF die de MSCI World-index volgt: een brede mix van grote bedrijven uit ontwikkelde landen. Met één aankoop spreid je over duizenden aandelen.',
+    facts: [
+      { label: 'Index', value: 'MSCI World' },
+      { label: 'Kosten per jaar', value: '0,20%' },
+      { label: 'Aantal bedrijven', value: '± 1.400' },
+      { label: 'Land van het fonds', value: 'Ierland' },
+    ],
   },
   {
     match: /ishares|ucits|\betf\b|vanguard|spdr|xtrackers/i,

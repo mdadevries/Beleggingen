@@ -21,7 +21,7 @@ import { exportPositionsCsv, exportTransactionsCsv } from './utils/exportData.ts
 
 export default function App() {
   const { route, goPage, goStock } = useHashRoute();
-  const { stocks, transactions, isDemo, demoReason, loading, quoteStatus, market } = usePortfolioData();
+  const { stocks, transactions, isDemo, demoReason, loading, quoteStatus, market, refreshing, refreshQuotes } = usePortfolioData();
 
   // De Koersen-pagina bestaat alleen in de demo-versie.
   const page = route.page === 'koersen' && !isDemo ? 'overzicht' : route.page;
@@ -75,6 +75,7 @@ export default function App() {
             transactions={transactions}
             market={market[detail.stock.ticker]}
             color={colors[detail.stock.ticker]}
+            isDemo={isDemo}
             onBack={() => goPage('overzicht')}
           />
         ) : page === 'koersen' ? (
@@ -89,7 +90,7 @@ export default function App() {
         ) : page === 'overzicht' ? (
           <>
             <KpiRow totals={totals} positions={positions} showInvested={showInvested} today={today} onSelectStock={goStock} />
-            {!isDemo && <QuoteNote status={quoteStatus} />}
+            {!isDemo && <QuoteNote status={quoteStatus} refreshing={refreshing} onRefresh={refreshQuotes} />}
 
             <PortfolioViews
               positions={positions}

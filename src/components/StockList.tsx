@@ -77,7 +77,7 @@ export const StockList: React.FC<StockListProps> = ({ positions, market, colors,
                 <span className="hidden sm:block text-right shrink-0 w-28">
                   <span className="block text-sm text-[rgb(var(--text-primary))] tabular">{formatEuroPrecise(p.stock.currentPrice)}</span>
                   {m?.changePct != null ? (
-                    <span className={`block text-xs tabular ${tone(m.changePct)}`}>{formatPercent(m.changePct)} vandaag</span>
+                    <span className={`block text-xs tabular ${tone(m.changePct)}`}>{formatPercent(m.changePct)} laatste dag</span>
                   ) : (
                     <span className="block text-xs text-[rgb(var(--text-muted))]">koers</span>
                   )}

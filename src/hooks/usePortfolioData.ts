@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { MarketInfo, Stock, Transaction } from '../data/types.ts';
 import { DEMO_MARKET, DEMO_STOCKS, DEMO_TRANSACTIONS } from '../data/demoData.ts';
 
@@ -10,6 +10,8 @@ export interface QuoteStatus {
   total: number;
   /** Nieuwste tijdstip van de gebruikte koersen (ISO), indien bekend */
   asOf: string | null;
+  /** Wanneer de koersen voor het laatst bij de bron zijn opgehaald (dagelijkse update of handmatig) */
+  updatedAt: string | null;
 }
 
 interface PortfolioData {
@@ -25,6 +27,10 @@ interface PortfolioData {
   quoteStatus: QuoteStatus | null;
   /** Marktgegevens per ticker (dagverandering, 52-wekenbereik, beurs). */
   market: Record<string, MarketInfo>;
+  /** Bezig met handmatig verversen? */
+  refreshing: boolean;
+  /** Haal nu nieuwe koersen op (de server laat dit hooguit één keer per uur echt doorgaan). */
+  refreshQuotes: () => void;
 }
 
 /** Wat /api/quotes per aandeel teruggeeft (alleen de velden die de site gebruikt). */
@@ -49,7 +55,9 @@ interface ApiQuote {
  * site nooit leeg oogt.
  */
 export function usePortfolioData(): PortfolioData {
-  const [state, setState] = useState<PortfolioData>({
+  const refreshRef = useRef<() => void>(() => undefined);
+  const refreshQuotes = useCallback(() => refreshRef.current(), []);
+  const [state, setState] = useState<Omit<PortfolioData, 'refreshQuotes'>>({
     stocks: DEMO_STOCKS,
     transactions: DEMO_TRANSACTIONS,
     isDemo: true,
@@ -58,6 +66,7 @@ export function usePortfolioData(): PortfolioData {
     error: null,
     quoteStatus: null,
     market: DEMO_MARKET,
+    refreshing: false,
   });
 
   useEffect(() => {
@@ -83,6 +92,7 @@ export function usePortfolioData(): PortfolioData {
             error: null,
             quoteStatus: null,
             market: DEMO_MARKET,
+            refreshing: false,
           });
           return; // nooit /api/transactions aanroepen voor een demo-sessie
         }
@@ -104,8 +114,20 @@ export function usePortfolioData(): PortfolioData {
                 error: null,
                 quoteStatus: null,
                 market: {},
+                refreshing: false,
               });
-              loadQuotes(data.stocks);
+              // Alleen aandelen die je nog hebt: verkochte posities hoeven geen koers.
+              const net = new Map<string, number>();
+              for (const t of data.transactions) {
+                net.set(t.ticker, (net.get(t.ticker) ?? 0) + (t.type === 'Kopen' ? t.quantity : -t.quantity));
+              }
+              const tracked = data.stocks.filter((s) => (net.get(s.ticker) ?? 0) > 1e-9);
+              const toTrack = tracked.length > 0 ? tracked : data.stocks;
+              refreshRef.current = () => {
+                setState((st) => ({ ...st, refreshing: true }));
+                loadQuotes(toTrack, 0, true);
+              };
+              loadQuotes(toTrack);
             } else {
               setState((s) => ({ ...s, demoReason: 'no-data', loading: false }));
             }
@@ -127,18 +149,18 @@ export function usePortfolioData(): PortfolioData {
      * bijgewerkt. Faalt dat (Yahoo weg, niet gevonden), dan blijft alles zoals
      * het was en zegt quoteStatus dat eerlijk.
      */
-    function loadQuotes(stocks: Stock[], attempt = 0) {
+    function loadQuotes(stocks: Stock[], attempt = 0, manual = false) {
       // Zijn nog niet alle koersen binnen (het gratis koersenbudget is per minuut beperkt),
       // dan vragen we na ruim een minuut nog een paar keer opnieuw.
       const retryLater = () => {
         if (attempt < 3 && !cancelled) timer = setTimeout(() => loadQuotes(stocks, attempt + 1), 65_000);
       };
-      fetch('/api/quotes')
+      fetch(manual ? '/api/quotes?refresh=1' : '/api/quotes')
         .then((res) => {
           if (!res.ok) throw new Error(`Status ${res.status}`);
           return res.json();
         })
-        .then((data: { quotes: Record<string, ApiQuote> }) => {
+        .then((data: { quotes: Record<string, ApiQuote>; updatedAt?: string | null }) => {
           if (cancelled) return;
           const quotes = data.quotes ?? {};
           const live = stocks.filter((s) => quotes[s.ticker]).length;
@@ -167,7 +189,8 @@ export function usePortfolioData(): PortfolioData {
             ...st,
             market,
             stocks: st.stocks.map((s) => (quotes[s.ticker] ? { ...s, currentPrice: quotes[s.ticker].price } : s)),
-            quoteStatus: { live, total: stocks.length, asOf },
+            quoteStatus: { live, total: stocks.length, asOf, updatedAt: data.updatedAt ?? null },
+            refreshing: false,
           }));
           // Ook nog eens vragen als dividend nog voor sommige aandelen ontbreekt: dat komt per ronde een paar tegelijk binnen.
           const dividendPending = stocks.some((s) => quotes[s.ticker] && quotes[s.ticker].dividends === undefined);
@@ -175,7 +198,11 @@ export function usePortfolioData(): PortfolioData {
         })
         .catch(() => {
           if (cancelled) return;
-          setState((st) => (st.quoteStatus && st.quoteStatus.live > 0 ? st : { ...st, quoteStatus: { live: 0, total: stocks.length, asOf: null } }));
+          setState((st) => ({
+            ...st,
+            refreshing: false,
+            quoteStatus: st.quoteStatus && st.quoteStatus.live > 0 ? st.quoteStatus : { live: 0, total: stocks.length, asOf: null, updatedAt: null },
+          }));
           retryLater();
         });
     }
@@ -186,5 +213,5 @@ export function usePortfolioData(): PortfolioData {
     };
   }, []);
 
-  return state;
+  return { ...state, refreshQuotes };
 }

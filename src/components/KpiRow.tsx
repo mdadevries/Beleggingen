@@ -72,7 +72,7 @@ export const KpiRow: React.FC<KpiRowProps> = ({ totals, positions, showInvested,
           </Stat>
         )}
         {today && (
-          <Stat label="Vandaag">
+          <Stat label="Laatste dag">
             <span className={today.amount >= 0 ? 'text-[rgb(var(--status-good))]' : 'text-[rgb(var(--status-critical))]'}>
               {hidden ? '' : <>{formatEuro(today.amount)} </>}
               <span className={hidden ? '' : 'text-sm'}>{hidden ? formatPercent(today.pct) : `(${formatPercent(today.pct)})`}</span>

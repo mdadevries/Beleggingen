@@ -1,0 +1,6 @@
+{
+  "crons": [
+    { "path": "/api/quotes", "schedule": "30 21 * * 1-5" },
+    { "path": "/api/quotes", "schedule": "30 22 * * 1-5" }
+  ]
+}
