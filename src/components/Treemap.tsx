@@ -2,6 +2,7 @@ import React from 'react';
 import { StockPosition } from '../data/types.ts';
 import { formatPercent, formatPercentPlain } from '../utils/portfolio.ts';
 import { useElementWidth } from '../hooks/useElementWidth.ts';
+import { shortName } from '../utils/names.ts';
 
 interface TreemapProps {
   positions: StockPosition[];
@@ -112,7 +113,7 @@ export const Treemap: React.FC<TreemapProps> = ({ positions, onSelect }) => {
               }}
               aria-label={`${p.stock.name}: ${formatPercentPlain(p.allocation, 1)} van je portefeuille`}
             >
-              {showName && <span className="block text-sm font-bold leading-tight truncate max-w-full">{p.stock.ticker}</span>}
+              {showName && <span className="block text-sm font-bold leading-tight truncate max-w-full">{shortName(p.stock.name)}</span>}
               {showName && <span className="block text-xs font-semibold opacity-90 tabular">{formatPercentPlain(p.allocation, 0)}</span>}
               {showMore && p.invested > 0 && <span className="block mt-1 text-xs opacity-90 tabular">{formatPercent(pct)}</span>}
             </button>

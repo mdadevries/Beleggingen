@@ -11,6 +11,14 @@ import { PriceChart } from './PriceChart.tsx';
 import { PriceHistoryChart } from './PriceHistoryChart.tsx';
 import { TransactionBadge } from './TransactionBadge.tsx';
 
+const SOURCE_NAME: Record<string, string> = {
+  twelvedata: 'Twelve Data',
+  justetf: 'justETF',
+  finnhub: 'Finnhub',
+  yahoo: 'Yahoo Finance',
+  transactieprijs: 'Laatste transactieprijs',
+};
+
 interface StockDetailProps {
   position: StockPosition;
   transactions: Transaction[];
@@ -252,6 +260,7 @@ export const StockDetail: React.FC<StockDetailProps> = ({ position: p, transacti
                 {profile && <Fact label="Soort">{profile.kind}</Fact>}
                 {market?.exchange && <Fact label="Beurs">{market.exchange}</Fact>}
                 {market?.currency && <Fact label="Noteert in">{market.currency === 'GBp' ? 'Britse ponden (pence)' : market.currency}</Fact>}
+                {live && market?.source && <Fact label="Koersbron">{SOURCE_NAME[market.source] ?? market.source}</Fact>}
                 {stock.isin && <Fact label="ISIN">{stock.isin}</Fact>}
               </dl>
               {hasFundamentals && fundamentals?.website && (

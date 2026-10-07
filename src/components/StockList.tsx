@@ -4,6 +4,7 @@ import { MarketInfo, StockPosition } from '../data/types.ts';
 import { OTHER_COLOR } from '../utils/colors.ts';
 import { formatEuro, formatEuroPrecise, formatPercent, formatPercentPlain } from '../utils/portfolio.ts';
 import { Private } from '../hooks/usePrivacy.tsx';
+import { shortName } from '../utils/names.ts';
 
 interface StockListProps {
   positions: StockPosition[];
@@ -69,10 +70,15 @@ export const StockList: React.FC<StockListProps> = ({ positions, market, colors,
               >
                 <span className="w-1.5 self-stretch rounded-full shrink-0" style={{ backgroundColor: colors[p.stock.ticker] ?? OTHER_COLOR }} aria-hidden="true" />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-semibold text-[rgb(var(--text-primary))] truncate">{p.stock.name}</span>
+                  <span className="block text-sm font-semibold text-[rgb(var(--text-primary))] truncate" title={p.stock.name}>{shortName(p.stock.name)}</span>
                   <span className="block text-xs text-[rgb(var(--text-muted))] tabular">
-                    {p.stock.ticker} · {formatPercentPlain(p.allocation, p.allocation < 0.1 ? 1 : 0)} van je portefeuille
+                    {p.stock.ticker} · {formatPercentPlain(p.allocation, p.allocation < 0.1 ? 1 : 0)}
+                    <span className="hidden sm:inline"> van je portefeuille</span>
                   </span>
+                  {/* Op de telefoon is de koerskolom verborgen: daar de dagverandering hier tonen. */}
+                  {m?.changePct != null && (
+                    <span className={`sm:hidden block text-xs tabular ${tone(m.changePct)}`}>{formatPercent(m.changePct)} laatste dag</span>
+                  )}
                 </span>
                 <span className="hidden sm:block text-right shrink-0 w-28">
                   <span className="block text-sm text-[rgb(var(--text-primary))] tabular">{formatEuroPrecise(p.stock.currentPrice)}</span>

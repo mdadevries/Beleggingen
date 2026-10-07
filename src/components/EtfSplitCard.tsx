@@ -4,6 +4,7 @@ import { isEtf } from '../data/stockProfiles.ts';
 import { formatEuro, formatPercentPlain } from '../utils/portfolio.ts';
 import { Private } from '../hooks/usePrivacy.tsx';
 import { Card } from './Card.tsx';
+import { shortName } from '../utils/names.ts';
 
 const ETF_COLOR = 'rgb(var(--series-1))';
 const STOCK_COLOR = 'rgb(var(--series-2))';
@@ -76,7 +77,7 @@ export const EtfSplitCard: React.FC<{ positions: StockPosition[]; onSelectStock:
               onClick={() => onSelectStock(data.biggest.stock.ticker)}
               className="font-semibold text-[rgb(var(--accent-text))] hover:underline"
             >
-              {data.biggest.stock.ticker}
+              {shortName(data.biggest.stock.name)}
             </button>{' '}
             ({formatPercentPlain(data.biggest.allocation, 1)} van het totaal).
           </>

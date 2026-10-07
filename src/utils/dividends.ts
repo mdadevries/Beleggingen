@@ -1,4 +1,5 @@
 import { MarketInfo, StockPosition, Transaction } from '../data/types.ts';
+import { shortName } from './names.ts';
 
 export interface DividendRow {
   ticker: string;
@@ -53,11 +54,11 @@ export function computeDividends(
   for (const p of positions) {
     const divs = market[p.stock.ticker]?.dividends;
     if (!divs) {
-      unknown.push(p.stock.ticker);
+      unknown.push(shortName(p.stock.name));
       continue;
     }
     if (divs.length === 0) {
-      noDividend.push(p.stock.ticker);
+      noDividend.push(shortName(p.stock.name));
       continue;
     }
     const perShareYear = divs.reduce((s, d) => s + d.amount, 0);

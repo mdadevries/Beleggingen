@@ -5,12 +5,16 @@ import { formatEuroPrecise } from '../utils/portfolio.ts';
 
 const SOURCE_LABEL: Record<QuoteSource, string> = {
   twelvedata: 'Twelve Data',
+  justetf: 'justETF',
+  finnhub: 'Finnhub',
   yahoo: 'Yahoo (reserve)',
   transactieprijs: 'Laatste transactieprijs',
 };
 
 const SOURCE_STYLE: Record<QuoteSource, string> = {
   twelvedata: 'bg-[rgb(var(--series-1))]/10 text-[rgb(var(--accent-text))] border-transparent',
+  justetf: 'bg-[rgb(var(--series-1))]/10 text-[rgb(var(--accent-text))] border-transparent',
+  finnhub: 'bg-[rgb(var(--series-1))]/10 text-[rgb(var(--accent-text))] border-transparent',
   yahoo: 'bg-[rgb(var(--surface-sunken))] text-[rgb(var(--text-secondary))] border-[rgb(var(--border))]',
   transactieprijs:
     'bg-[rgb(var(--banner-bg))] text-[rgb(var(--banner-text))] border-[rgb(var(--banner-border))]',
@@ -26,16 +30,20 @@ const SourceBadge: React.FC<{ source: QuoteSource }> = ({ source }) => (
 
 const STEPS: { title: string; text: string }[] = [
   {
-    title: 'Twelve Data',
-    text: 'De site vraagt eerst de koers op bij Twelve Data, met je eigen sleutel. Dat is een officiële bron.',
+    title: "ETF's: justETF",
+    text: "Voor ETF's vraagt de site de koers op bij justETF, op het ISIN-nummer. Die bron is gratis en geeft de koers meteen in euro's, plus de koersgrafiek.",
   },
   {
-    title: 'Yahoo Finance als reserve',
-    text: 'Lukt dat niet (aandeel niet gevonden, limiet op), dan probeert de site Yahoo. Dat is een onofficiële bron, dus alleen een vangnet.',
+    title: 'Losse aandelen: Twelve Data',
+    text: 'Voor losse aandelen eerst Twelve Data, met je eigen sleutel. Dat is een officiële bron, maar het gratis plan geeft 8 koersen per minuut.',
   },
   {
-    title: 'Laatste transactieprijs',
-    text: 'Lukt ook dat niet, dan blijft je laatste transactieprijs staan. Dat staat er dan ook bij, zodat je nooit een oude koers voor een live koers aanziet.',
+    title: 'Amerikaanse aandelen: Finnhub',
+    text: 'Lukt Twelve Data niet, dan probeert de site Finnhub voor aandelen op Amerikaanse beurzen (zoals Nasdaq). Het aandeel wordt opgezocht op ISIN, nooit op naam.',
+  },
+  {
+    title: 'Vangnet: Yahoo en justETF',
+    text: 'Daarna Yahoo (onofficieel) en als laatste justETF. Lukt ook dat niet, dan blijft je laatste transactieprijs staan, en dat staat er dan bij.',
   },
 ];
 
@@ -59,7 +67,7 @@ export const QuoteFlow: React.FC = () => (
       ))}
     </ol>
     <ul className="mt-4 pt-4 border-t border-[rgb(var(--border))] space-y-1.5 text-xs text-[rgb(var(--text-muted))]">
-      <li>Een koers wordt 5 minuten bewaard, zodat je dagelijkse limiet bij Twelve Data niet opraakt.</li>
+      <li>Elke werkdag na beurssluiting worden alle koersen automatisch bijgewerkt. Met "Nu verversen" kan het tussendoor, hooguit één keer per uur.</li>
       <li>Alles wordt omgerekend naar euro (ook koersen in dollars of pence).</li>
       <li>Wijkt een koers meer dan 15% af van je laatste transactieprijs, dan staat er "controleer deze koers".</li>
     </ul>

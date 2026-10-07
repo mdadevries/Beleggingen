@@ -83,7 +83,7 @@ export default function App() {
             <Card title="Zo komen de koersen binnen" subtitle="Voorbeeld in de demo. In de echte versie komt dit uit /api/quotes.">
               <QuoteFlow />
             </Card>
-            <Card title="Koersen per aandeel" subtitle="Demodata: vier situaties die kunnen voorkomen">
+            <Card title="Koersen per aandeel" subtitle="Demodata: de situaties die kunnen voorkomen">
               <QuoteSourcesTable stocks={stocks} quotes={DEMO_QUOTES} />
             </Card>
           </>
@@ -107,7 +107,7 @@ export default function App() {
               </Card>
 
               <Card title="Laatste transacties" className="lg:col-span-2 min-w-0">
-                <RecentTransactions transactions={transactions} limit={5} onSelectStock={goStock} />
+                <RecentTransactions transactions={transactions} stocks={stocks} limit={5} onSelectStock={goStock} />
                 <button
                   type="button"
                   onClick={() => goPage('transacties')}

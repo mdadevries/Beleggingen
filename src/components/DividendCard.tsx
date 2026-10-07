@@ -5,6 +5,7 @@ import { OTHER_COLOR } from '../utils/colors.ts';
 import { formatDate, formatEuro, formatEuroPrecise, formatPercentPlain } from '../utils/portfolio.ts';
 import { Private } from '../hooks/usePrivacy.tsx';
 import { Card } from './Card.tsx';
+import { shortName } from '../utils/names.ts';
 
 interface DividendCardProps {
   positions: StockPosition[];
@@ -60,7 +61,7 @@ export const DividendCard: React.FC<DividendCardProps> = ({ positions, transacti
                 <button type="button" onClick={() => onSelectStock(r.ticker)} className="w-full text-left group">
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="text-sm font-semibold text-[rgb(var(--text-primary))] group-hover:underline truncate">
-                      {r.ticker}
+                      {shortName(r.name)}
                     </span>
                     <span className="text-sm font-semibold tabular text-[rgb(var(--text-primary))]">
                       <Private>{formatEuroPrecise(r.expected)}</Private>

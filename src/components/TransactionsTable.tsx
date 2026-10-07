@@ -4,6 +4,7 @@ import { Stock, Transaction } from '../data/types.ts';
 import { TransactionBadge } from './TransactionBadge.tsx';
 import { formatDate, formatEuroPrecise } from '../utils/portfolio.ts';
 import { Private } from '../hooks/usePrivacy.tsx';
+import { shortName } from '../utils/names.ts';
 
 interface TransactionsTableProps {
   transactions: Transaction[];
@@ -62,7 +63,7 @@ export const TransactionsTable: React.FC<TransactionsTableProps> = ({ transactio
           <option value="alle">Alle aandelen</option>
           {stocks.map((s) => (
             <option key={s.ticker} value={s.ticker}>
-              {s.ticker}
+              {shortName(s.name)}
             </option>
           ))}
         </select>

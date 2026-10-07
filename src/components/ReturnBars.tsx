@@ -2,6 +2,7 @@ import React from 'react';
 import { StockPosition } from '../data/types.ts';
 import { formatEuro, formatPercent } from '../utils/portfolio.ts';
 import { Private } from '../hooks/usePrivacy.tsx';
+import { shortName } from '../utils/names.ts';
 
 interface ReturnBarsProps {
   positions: StockPosition[];
@@ -33,8 +34,8 @@ export const ReturnBars: React.FC<ReturnBarsProps> = ({ positions, onSelect }) =
                 className="w-full grid grid-cols-[5.5rem_1fr_4.5rem] sm:grid-cols-[9rem_1fr_6rem] items-center gap-3 py-2.5 px-2 -mx-2 rounded-lg text-left hover:bg-[rgb(var(--surface-sunken))]"
               >
                 <span className="min-w-0">
-                  <span className="block text-sm font-semibold text-[rgb(var(--text-primary))] truncate">{r.stock.ticker}</span>
-                  <span className="hidden sm:block text-xs text-[rgb(var(--text-muted))] truncate">{r.stock.name}</span>
+                  <span className="block text-sm font-semibold text-[rgb(var(--text-primary))] truncate">{shortName(r.stock.name)}</span>
+                  <span className="hidden sm:block text-xs text-[rgb(var(--text-muted))] truncate">{r.stock.ticker}</span>
                 </span>
                 <span className="relative h-7">
                   <span className="absolute inset-y-0 w-px bg-[rgb(var(--border-strong))]" style={{ left: `${zero}%` }} aria-hidden="true" />

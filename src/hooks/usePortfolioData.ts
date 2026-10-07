@@ -38,6 +38,7 @@ interface ApiQuote {
   price: number;
   asOf: string | null;
   currency?: string;
+  source?: 'twelvedata' | 'justetf' | 'finnhub' | 'yahoo';
   changePct?: number | null;
   range52?: { low: number; high: number } | null;
   exchange?: string | null;
@@ -181,6 +182,7 @@ export function usePortfolioData(): PortfolioData {
                   exchange: q.exchange ?? null,
                   currency: q.currency ?? null,
                   asOf: q.asOf,
+                  source: q.source ?? null,
                   dividends: q.dividends ?? null,
                 }
               : { live: false };

@@ -4,6 +4,7 @@ import { StockPosition } from '../data/types.ts';
 import { OTHER_COLOR } from '../utils/colors.ts';
 import { PortfolioTotals, formatEuro, formatPercent, formatPercentPlain } from '../utils/portfolio.ts';
 import { Private, usePrivacy } from '../hooks/usePrivacy.tsx';
+import { shortName } from '../utils/names.ts';
 
 interface DonutChartProps {
   positions: StockPosition[];
@@ -38,9 +39,9 @@ export const DonutChart: React.FC<DonutChartProps> = ({ positions, colors, total
   const restValue = rest.reduce((s, p) => s + p.currentValue, 0);
 
   const parts = [
-    ...top.map((p) => ({ id: p.stock.ticker, share: p.allocation, color: colors[p.stock.ticker] ?? OTHER_COLOR, label: p.stock.name })),
+    ...top.map((p) => ({ id: p.stock.ticker, share: p.allocation, color: colors[p.stock.ticker] ?? OTHER_COLOR, label: shortName(p.stock.name) })),
     ...(rest.length > 0
-      ? [{ id: REST, share: restShare, color: OTHER_COLOR, label: `Overig (${rest.length} aandelen)` }]
+      ? [{ id: REST, share: restShare, color: OTHER_COLOR, label: `Overig (${rest.length} ${rest.length === 1 ? 'aandeel' : 'aandelen'})` }]
       : []),
   ];
 
@@ -127,7 +128,7 @@ export const DonutChart: React.FC<DonutChartProps> = ({ positions, colors, total
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none px-12">
           {activePos ? (
             <>
-              <p className="text-xs font-medium text-[rgb(var(--text-muted))] truncate max-w-full">{activePos.stock.name}</p>
+              <p className="text-xs font-medium text-[rgb(var(--text-muted))] truncate max-w-full">{shortName(activePos.stock.name)}</p>
               <p className="text-3xl sm:text-4xl font-bold tracking-tight text-[rgb(var(--text-primary))] tabular">
                 {formatPercentPlain(activePos.allocation, 0)}
               </p>
@@ -143,7 +144,7 @@ export const DonutChart: React.FC<DonutChartProps> = ({ positions, colors, total
             </>
           ) : activeRest ? (
             <>
-              <p className="text-xs font-medium text-[rgb(var(--text-muted))]">Overig · {rest.length} aandelen</p>
+              <p className="text-xs font-medium text-[rgb(var(--text-muted))]">Overig · {rest.length} {rest.length === 1 ? 'aandeel' : 'aandelen'}</p>
               <p className="text-3xl sm:text-4xl font-bold tracking-tight text-[rgb(var(--text-primary))] tabular">
                 {formatPercentPlain(restShare, 0)}
               </p>
@@ -181,7 +182,7 @@ export const DonutChart: React.FC<DonutChartProps> = ({ positions, colors, total
             <Row
               id={p.stock.ticker}
               color={colors[p.stock.ticker] ?? OTHER_COLOR}
-              name={p.stock.name}
+              name={shortName(p.stock.name)}
               sub={<Private>{formatEuro(p.currentValue)}</Private>}
               share={p.allocation}
             />
@@ -192,7 +193,7 @@ export const DonutChart: React.FC<DonutChartProps> = ({ positions, colors, total
             <Row
               id={REST}
               color={OTHER_COLOR}
-              name={`Overig (${rest.length} aandelen)`}
+              name={`Overig (${rest.length} ${rest.length === 1 ? 'aandeel' : 'aandelen'})`}
               sub={<Private>{formatEuro(restValue)}</Private>}
               share={restShare}
               trailing={
@@ -211,7 +212,7 @@ export const DonutChart: React.FC<DonutChartProps> = ({ positions, colors, total
                       onClick={() => onSelect(p.stock.ticker)}
                       className="w-full flex items-center gap-2 py-1.5 px-2 -mx-2 rounded-md text-left text-sm hover:bg-[rgb(var(--surface-sunken))]"
                     >
-                      <span className="flex-1 truncate text-[rgb(var(--text-secondary))]">{p.stock.name}</span>
+                      <span className="flex-1 truncate text-[rgb(var(--text-secondary))]">{shortName(p.stock.name)}</span>
                       <span className="tabular text-[rgb(var(--text-primary))] font-semibold">{formatPercentPlain(p.allocation, 1)}</span>
                     </button>
                   </li>

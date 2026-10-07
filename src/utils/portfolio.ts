@@ -1,4 +1,4 @@
-import { SeriesPoint, Stock, StockPosition, Transaction, ValuePoint } from '../data/types.ts';
+import { SeriesPoint, Stock, StockPosition, Transaction } from '../data/types.ts';
 
 /**
  * Berekent per aandeel de huidige positie (stukken, gem. aankoopkoers,
@@ -82,59 +82,6 @@ export function computeTotals(positions: StockPosition[]): PortfolioTotals {
     totalProfitLossPct: totalInvested > 0 ? totalProfitLoss / totalInvested : 0,
     numberOfStocks: positions.length,
   };
-}
-
-/**
- * Benadert de portefeuillewaarde per maandultimo, door voor elke maand de op
- * dat moment aangehouden stukken te vermenigvuldigen met een koers die
- * lineair interpoleert tussen de eerste aankoopkoers en de huidige koers.
- * Bedoeld als illustratief verloop bij demodata, niet als exacte
- * koershistorie.
- */
-export function computeValueOverTime(stocks: Stock[], transactions: Transaction[]): ValuePoint[] {
-  if (transactions.length === 0) return [];
-
-  const sortedTx = [...transactions].sort((a, b) => a.date.localeCompare(b.date));
-  const firstDate = new Date(sortedTx[0].date + 'T00:00:00');
-  const lastDate = new Date(sortedTx[sortedTx.length - 1].date + 'T00:00:00');
-
-  const firstBuyPriceByTicker = new Map<string, number>();
-  for (const tx of sortedTx) {
-    if (tx.type === 'Kopen' && !firstBuyPriceByTicker.has(tx.ticker)) {
-      firstBuyPriceByTicker.set(tx.ticker, tx.price);
-    }
-  }
-
-  const monthEnds: Date[] = [];
-  const cursor = new Date(firstDate.getFullYear(), firstDate.getMonth(), 1);
-  const endCursor = new Date(lastDate.getFullYear(), lastDate.getMonth(), 1);
-  while (cursor <= endCursor) {
-    monthEnds.push(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0));
-    cursor.setMonth(cursor.getMonth() + 1);
-  }
-  // Laatste punt = vandaag (huidige koers), niet noodzakelijk een maandultimo.
-  const today = lastDate;
-  if (monthEnds[monthEnds.length - 1]?.getTime() !== today.getTime()) {
-    monthEnds.push(today);
-  }
-
-  const totalSpan = Math.max(1, today.getTime() - firstDate.getTime());
-
-  return monthEnds.map((date) => {
-    let value = 0;
-    for (const stock of stocks) {
-      const sharesAtDate = sortedTx
-        .filter((t) => t.ticker === stock.ticker && new Date(t.date + 'T00:00:00') <= date)
-        .reduce((sum, t) => sum + (t.type === 'Kopen' ? t.quantity : -t.quantity), 0);
-      if (sharesAtDate <= 0) continue;
-
-      const startPrice = firstBuyPriceByTicker.get(stock.ticker) ?? stock.currentPrice;
-      const progress = Math.min(1, Math.max(0, (date.getTime() - firstDate.getTime()) / totalSpan));
-      const interpolatedPrice = startPrice + (stock.currentPrice - startPrice) * progress;
-      value += sharesAtDate * interpolatedPrice;
-    }
-    return { date: date.toISOString().slice(0, 10), value };
-  });
 }
 
 export function formatEuro(value: number): string {

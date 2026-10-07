@@ -4,9 +4,15 @@ import crypto from 'crypto';
 // Live (licht vertraagde) koersen voor je aandelen, in euro's.
 //
 // Volgorde per aandeel:
-//   1. Twelve Data (officiële API, sleutel in Vercel: TWELVEDATA_API_KEY)
-//   2. Yahoo Finance als reserve (niet-officieel, geen garantie)
-//   3. Lukt beide niet: de site toont de laatste transactieprijs en zegt dat.
+//   ETF's (herkend aan de naam, met ISIN):
+//     1. justETF (gratis, geen sleutel, op ISIN, direct in euro's)
+//     2. Twelve Data, 3. Yahoo
+//   Losse aandelen:
+//     1. Twelve Data (officiële API, sleutel in Vercel: TWELVEDATA_API_KEY)
+//     2. Finnhub (alleen Amerikaanse beurzen, sleutel: FINNHUB_API_KEY, 60 per minuut gratis)
+//     3. Yahoo Finance (niet-officieel, geeft vanaf Vercel vaak 429)
+//     4. justETF als laatste vangnet (op ISIN; kan een dag achterlopen)
+//   Lukt niets: de site toont de laatste transactieprijs en zegt dat.
 //
 // Bewust GEEN opzoeken op naam: een verkeerd bedrijf is erger dan geen koers.
 // Zonder ISIN of vaste mapping hieronder krijgt een aandeel dus geen live koers.
@@ -46,6 +52,9 @@ const YAHOO2 = 'https://query2.finance.yahoo.com';
 const FRANKFURTER_BASE = 'https://api.frankfurter.dev/v1';
 const FRANKFURTER = `${FRANKFURTER_BASE}/latest`;
 const FINNHUB = 'https://finnhub.io/api/v1';
+const JUSTETF = 'https://www.justetf.com/api/etfs';
+// Een justETF-koers ouder dan dit gebruiken we niet (vakantie/weekend valt erbinnen).
+const JUSTETF_MAX_AGE_DAYS = 6;
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
 // Twelve Data Basic: 8 credits per minuut. Een koers kost 1 credit, een
@@ -84,9 +93,11 @@ interface Quote {
   /** Valuta waarin de bron de koers gaf (vóór omrekenen) */
   currency: string;
   /** Welke bron de koers leverde */
-  source: 'twelvedata' | 'yahoo';
+  source: 'twelvedata' | 'yahoo' | 'justetf' | 'finnhub';
   /** Hoe het symbool gevonden is */
   matchedBy: 'map' | 'isin' | 'saved';
+  /** ETF (herkend aan de naam)? */
+  isEtf?: boolean;
   /** Tijdstip van de koers volgens de bron (ISO), indien bekend */
   asOf: string | null;
   /** Gevuld als de koers sterk afwijkt van je laatste transactieprijs */
@@ -223,7 +234,7 @@ interface RawQuote {
   price: number;
   currency: string;
   asOf: string | null;
-  matchedBy: 'map' | 'isin';
+  matchedBy: 'map' | 'isin' | 'saved';
   /** Extra marktgegevens; range52 staat nog in de valuta van de bron */
   changePct?: number | null;
   range52?: { low: number; high: number } | null;
@@ -379,10 +390,128 @@ async function yahooQuote(stock: StoredStock, db: Db): Promise<RawQuote> {
     price: m.price,
     currency: m.currency,
     asOf: m.asOf,
-    matchedBy: matchedBy as 'map' | 'isin',
+    matchedBy,
     changePct: m.changePct,
     range52: m.range52,
     exchange: m.exchange,
+  };
+}
+
+// ---------- justETF (ETF's, gratis, op ISIN, al in euro's) ----------
+
+/** Is dit een ETF? Zelfde idee als isEtf() op de site: op de naam. */
+function isEtfStock(stock: StoredStock): boolean {
+  return /\betf\b|ucits|ishares|vanguard|spdr|xtrackers|amundi|lyxor|invesco|wisdomtree|vaneck|index ?fund|tracker|s&p ?500|msci|ftse|all-?world|stoxx/i.test(
+    `${stock.ticker} ${stock.name}`
+  );
+}
+
+async function justetfJson(path: string, timeoutMs = REQUEST_TIMEOUT_MS): Promise<any> {
+  const res = await fetch(`${JUSTETF}${path}`, {
+    headers: { 'User-Agent': UA, Accept: 'application/json', 'Accept-Language': 'en-US,en;q=0.9' },
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!res.ok) throw new Error(`justETF status ${res.status}`);
+  return res.json();
+}
+
+const VENUES: Record<string, string> = {
+  XETRA: 'Xetra (Frankfurt)',
+  gettex: 'gettex (München)',
+  'Euronext Amsterdam': 'Euronext Amsterdam',
+};
+
+async function justetfQuote(stock: StoredStock): Promise<RawQuote> {
+  if (!stock.isin) throw new Error('justETF: geen ISIN');
+  const isin = encodeURIComponent(stock.isin);
+  const data = await justetfJson(`/${isin}/quote?locale=en&currency=EUR&isin=${isin}`);
+  const price = num(data?.latestQuote?.raw);
+  const date = typeof data?.latestQuoteDate === 'string' ? data.latestQuoteDate : null;
+  if (price === null || !(price > 0) || !date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new Error('justETF: geen koers voor deze ISIN');
+  }
+  const ageDays = (Date.now() - new Date(`${date}T00:00:00Z`).getTime()) / 86400_000;
+  if (ageDays > JUSTETF_MAX_AGE_DAYS) throw new Error(`justETF: koers is oud (${date})`);
+  const prev = num(data?.previousQuote?.raw);
+  const lo = num(data?.quoteLowHigh?.low?.raw);
+  const hi = num(data?.quoteLowHigh?.high?.raw);
+  const venue = typeof data?.quoteTradingVenue === 'string' && data.quoteTradingVenue ? data.quoteTradingVenue : null;
+  return {
+    symbol: stock.isin,
+    price,
+    currency: 'EUR', // gevraagd in euro's: justETF rekent zelf om
+    // Alleen een datum bekend: we zetten het op de slottijd van de Europese beurzen.
+    asOf: `${date}T15:30:00Z`,
+    matchedBy: 'isin',
+    changePct: prev && prev > 0 ? price / prev - 1 : null,
+    range52: lo !== null && hi !== null && lo > 0 && hi > 0 ? { low: lo, high: hi } : null,
+    exchange: venue ? (VENUES[venue] ?? venue) : null,
+    mic: null,
+  };
+}
+
+/** Dagkoersen van justETF (in euro's). */
+async function justetfHistory(isin: string): Promise<Points> {
+  const to = new Date().toISOString().slice(0, 10);
+  const from = new Date(Date.now() - 5 * 365 * 86400_000).toISOString().slice(0, 10);
+  const i = encodeURIComponent(isin);
+  const data = await justetfJson(
+    `/${i}/performance-chart?locale=en&currency=EUR&valuesType=MARKET_VALUE&reduceData=false&includeDividends=false&dateFrom=${from}&dateTo=${to}`,
+    8000
+  );
+  const series: any[] = Array.isArray(data?.series) ? data.series : [];
+  const points: Points = [];
+  for (const p of series) {
+    const d = typeof p?.date === 'string' ? p.date.slice(0, 10) : '';
+    const v = num(p?.value?.raw);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d) && v !== null && v > 0) points.push([d, Math.round(v * 10000) / 10000]);
+  }
+  if (points.length < 5) throw new Error('justETF: te weinig koersen');
+  return points;
+}
+
+// ---------- Finnhub-koers (alleen Amerikaanse beurzen) ----------
+
+async function finnhubQuote(stock: StoredStock, prev: Quote | undefined): Promise<RawQuote> {
+  if (!process.env.FINNHUB_API_KEY) throw new Error('Finnhub: geen sleutel');
+  let symbol: string | undefined;
+  let matchedBy: RawQuote['matchedBy'] = 'saved';
+  let exchange: string | null = null;
+  const mapped = TD_MAP[stock.ticker];
+  if (prev?.source === 'finnhub') {
+    symbol = prev.symbol;
+    exchange = prev.exchange ?? null;
+  } else if (mapped && /^(XNAS|XNYS|ARCX|BATS|XASE)$/.test(mapped.mic)) {
+    symbol = mapped.symbol;
+    matchedBy = 'map';
+  } else if (stock.isin) {
+    // Symbool opzoeken op ISIN (nooit op naam). Alleen Amerikaanse noteringen in dollars.
+    const p = await finnhub(`/stock/profile2?isin=${encodeURIComponent(stock.isin)}`);
+    if (typeof p?.ticker !== 'string' || !p.ticker) throw new Error('Finnhub: ISIN niet gevonden');
+    if (p.currency !== 'USD' || !/nasdaq|new york|nyse/i.test(String(p.exchange ?? ''))) {
+      throw new Error('Finnhub: geen Amerikaanse notering');
+    }
+    symbol = p.ticker;
+    matchedBy = 'isin';
+    exchange = /nasdaq/i.test(p.exchange) ? 'NASDAQ' : 'NYSE';
+  }
+  if (!symbol) throw new Error('Finnhub: geen symbool');
+  const q = await finnhub(`/quote?symbol=${encodeURIComponent(symbol)}`);
+  const price = num(q?.c);
+  if (price === null || !(price > 0)) throw new Error('Finnhub: geen koers');
+  const t = num(q?.t);
+  const dp = num(q?.dp);
+  return {
+    symbol,
+    price,
+    currency: 'USD',
+    asOf: t && t > 0 ? new Date(t * 1000).toISOString() : null,
+    matchedBy,
+    changePct: dp === null ? null : dp / 100,
+    // Finnhub /quote geeft geen 52-wekenbereik: houd het vorige als we dat hebben.
+    range52: null,
+    exchange: exchange ?? (mapped?.mic === 'XNAS' ? 'NASDAQ' : null),
+    mic: mapped?.mic ?? null,
   };
 }
 
@@ -431,31 +560,37 @@ async function quoteForStock(
   db: Db,
   fxCache: Map<string, Promise<number>>,
   takeCredit: () => boolean,
-  takeYahoo: () => boolean
+  takeYahoo: () => boolean,
+  prev: Quote | undefined
 ): Promise<Quote> {
+  const etf = isEtfStock(stock);
+  type Step = { source: Quote['source']; run: () => Promise<RawQuote> };
+  const td: Step = {
+    source: 'twelvedata',
+    run: () => (takeCredit() ? tdQuote(stock) : Promise.reject(new Error('Twelve Data-budget voor deze ronde op'))),
+  };
+  const yahoo: Step = {
+    source: 'yahoo',
+    run: () => (takeYahoo() ? yahooQuote(stock, db) : Promise.reject(new Error('Yahoo-budget van deze ronde op'))),
+  };
+  const jetf: Step = { source: 'justetf', run: () => justetfQuote(stock) };
+  const fh: Step = { source: 'finnhub', run: () => finnhubQuote(stock, prev) };
+  // ETF's eerst bij justETF: gratis, op ISIN en in euro's (Twelve Data gratis dekt Europese ETF's niet).
+  const steps: Step[] = etf ? [jetf, td, yahoo] : [td, fh, yahoo, jetf];
+
   let raw: RawQuote | null = null;
-  let source: Quote['source'] = 'twelvedata';
-  let tdError = '';
-
-  if (takeCredit()) {
+  let source: Quote['source'] = steps[0].source;
+  const errors: string[] = [];
+  for (const step of steps) {
     try {
-      raw = await tdQuote(stock);
+      raw = await step.run();
+      source = step.source;
+      break;
     } catch (e) {
-      tdError = errMsg(e);
-    }
-  } else {
-    tdError = 'Twelve Data-budget voor deze ronde op';
-  }
-
-  if (!raw) {
-    source = 'yahoo';
-    try {
-      if (!takeYahoo()) throw new Error('Yahoo-budget van deze ronde op, volgende ronde opnieuw');
-      raw = await yahooQuote(stock, db);
-    } catch (e) {
-      throw new Error(`${tdError || 'Twelve Data niet gebruikt'}; ${errMsg(e)}`);
+      errors.push(errMsg(e));
     }
   }
+  if (!raw) throw new Error(errors.join('; '));
 
   const eur = await toEuro(raw.price, raw.currency, fxCache, takeCredit);
   const price = Math.round(eur * 10000) / 10000;
@@ -480,11 +615,15 @@ async function quoteForStock(
     }
   }
 
+  // Bron zonder 52-wekenbereik (Finnhub): houd het vorige bereik als dat er is.
+  if (!range52 && prev?.range52) range52 = prev.range52;
+
   return {
     price,
     symbol: raw.symbol,
     currency: raw.currency,
     source,
+    isEtf: etf,
     matchedBy: raw.matchedBy,
     asOf: raw.asOf,
     warning,
@@ -502,7 +641,8 @@ async function dividendsFor(
   fxCache: Map<string, Promise<number>>,
   takeCredit: () => boolean
 ): Promise<{ date: string; amount: number }[]> {
-  let ySymbol: string | null | undefined = quote.source === 'yahoo' ? quote.symbol : stock.symbol;
+  let ySymbol: string | null | undefined =
+    quote.source === 'yahoo' || quote.source === 'finnhub' ? quote.symbol : stock.symbol;
   if (!ySymbol && stock.isin) ySymbol = await yahooResolveIsin(stock.isin);
   if (!ySymbol) throw new Error('Geen Yahoo-symbool bekend');
   const d = await yahooDividends(ySymbol);
@@ -681,38 +821,50 @@ async function handleHistory(ticker: string, db: Db, res: VercelResponse) {
   const credits = await loadCredits(db, now);
   const budget = makeBudget(credits.left);
 
-  let raw: { rows: { date: string; close: number }[]; currency: string } | null = null;
-  let source = 'twelvedata';
-  let tdError = '';
-  if (budget.take()) {
+  // Elke stap levert dagkoersen in euro's, of gooit een fout. ETF's eerst via justETF.
+  const viaTd = async (): Promise<Points> => {
+    if (!budget.take()) throw new Error('Twelve Data-budget op');
+    const r = await tdHistory(stock, quote);
+    return toEuroSeries(r.rows, r.currency);
+  };
+  const viaYahoo = async (): Promise<Points> => {
+    let sym: string | null | undefined = quote?.source === 'yahoo' || quote?.source === 'finnhub' ? quote.symbol : stock.symbol;
+    if (!sym && stock.isin) sym = await yahooResolveIsin(stock.isin);
+    if (!sym) throw new Error('Geen Yahoo-symbool bekend');
+    const r = await yahooHistory(sym);
+    return toEuroSeries(r.rows, r.currency);
+  };
+  const viaJustetf = async (): Promise<Points> => {
+    if (!stock.isin) throw new Error('justETF: geen ISIN');
+    return justetfHistory(stock.isin);
+  };
+  const steps: [string, () => Promise<Points>][] = isEtfStock(stock)
+    ? [['justetf', viaJustetf], ['twelvedata', viaTd], ['yahoo', viaYahoo]]
+    : [['twelvedata', viaTd], ['yahoo', viaYahoo], ['justetf', viaJustetf]];
+
+  let points: Points | null = null;
+  let source = '';
+  const errors: string[] = [];
+  for (const [name, run] of steps) {
     try {
-      raw = await tdHistory(stock, quote);
+      points = await run();
+      source = name;
+      break;
     } catch (e) {
-      tdError = errMsg(e);
+      errors.push(`${name}: ${errMsg(e)}`);
     }
-  } else {
-    tdError = 'Twelve Data-budget op';
   }
-  if (!raw) {
-    source = 'yahoo';
-    try {
-      let sym: string | null | undefined = quote?.source === 'yahoo' ? quote.symbol : stock.symbol;
-      if (!sym && stock.isin) sym = await yahooResolveIsin(stock.isin);
-      if (!sym) throw new Error('Geen Yahoo-symbool bekend');
-      raw = await yahooHistory(sym);
-    } catch (e) {
-      console.log(`[history] ${ticker}: MISLUKT - ${tdError}; ${errMsg(e)}`);
-      // Liever een oudere historie dan niets.
-      if (hit) {
-        res.status(200).json({ ticker, points: hit.points, source: hit.source, updatedAt: hit.fetchedAt });
-      } else {
-        res.status(502).json({ error: 'Koershistorie niet beschikbaar.' });
-      }
-      return;
+  if (!points) {
+    console.log(`[history] ${ticker}: MISLUKT - ${errors.join('; ')}`);
+    // Liever een oudere historie dan niets.
+    if (hit) {
+      res.status(200).json({ ticker, points: hit.points, source: hit.source, updatedAt: hit.fetchedAt });
+    } else {
+      res.status(502).json({ error: 'Koershistorie niet beschikbaar.' });
     }
+    return;
   }
 
-  const points = await toEuroSeries(raw.rows, raw.currency);
   console.log(`[history] ${ticker}: ok via ${source}, ${points.length} dagkoersen`);
   const rows = [
     { key: HISTORY_PREFIX + ticker, body: { fetchedAt: new Date(now).toISOString(), points, source }, expires_at: new Date(now + KEEP_DAYS * 86400_000).toISOString() },
@@ -880,7 +1032,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
 
     const fxCache = new Map<string, Promise<number>>();
-    const results = await Promise.allSettled(need.map((s) => quoteForStock(s, db, fxCache, budget.take, takeYahoo)));
+    const results = await Promise.allSettled(need.map((s) => quoteForStock(s, db, fxCache, budget.take, takeYahoo, cache.get(s.ticker)?.quote)));
 
     const body: QuotesResponse = { quotes: {}, failed: [], fetchedAt: new Date(now).toISOString(), updatedAt: null, oldestAt: null };
     const toSave = new Map<string, { key: string; body: unknown; expires_at: string }>();

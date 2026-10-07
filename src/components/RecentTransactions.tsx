@@ -1,16 +1,20 @@
 import React from 'react';
-import { Transaction } from '../data/types.ts';
+import { Stock, Transaction } from '../data/types.ts';
 import { TransactionBadge } from './TransactionBadge.tsx';
 import { formatDate, formatEuroPrecise } from '../utils/portfolio.ts';
 import { Private } from '../hooks/usePrivacy.tsx';
+import { shortName } from '../utils/names.ts';
 
 interface RecentTransactionsProps {
   transactions: Transaction[];
+  /** Om de naam te tonen in plaats van de afkorting */
+  stocks?: Stock[];
   limit?: number;
   onSelectStock?: (ticker: string) => void;
 }
 
-export const RecentTransactions: React.FC<RecentTransactionsProps> = ({ transactions, limit = 5, onSelectStock }) => {
+export const RecentTransactions: React.FC<RecentTransactionsProps> = ({ transactions, stocks = [], limit = 5, onSelectStock }) => {
+  const names = new Map(stocks.map((s) => [s.ticker, shortName(s.name)]));
   const recent = [...transactions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, limit);
 
   if (recent.length === 0) {
@@ -23,7 +27,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({ transact
         <li key={tx.id} className="py-3 flex items-center justify-between gap-3">
           <div className="min-w-0">
             <button type="button" onClick={() => onSelectStock?.(tx.ticker)} className="text-sm font-semibold text-[rgb(var(--text-primary))] truncate hover:underline">
-              {tx.ticker}
+              {names.get(tx.ticker) ?? tx.ticker}
             </button>
             <p className="text-xs text-[rgb(var(--text-muted))]">{formatDate(tx.date)}</p>
           </div>

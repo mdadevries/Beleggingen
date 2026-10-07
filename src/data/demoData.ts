@@ -10,12 +10,13 @@ export const DEMO_STOCKS: Stock[] = [
   { ticker: 'ADYEN', name: 'Adyen', currentPrice: 1650, colorSlot: 4 },
   // Prosus staat in de demo op de laatste transactieprijs (zie DEMO_QUOTES).
   { ticker: 'PROSUS', name: 'Prosus', currentPrice: 37.4, colorSlot: 5 },
+  { ticker: 'VANGUA', name: 'Vanguard FTSE All-World UCITS ETF', currentPrice: 167.14, colorSlot: 1 },
 ];
 
 // Voorbeeld van hoe /api/quotes per aandeel antwoordt. Puur demo: een
 // demo-sessie roept /api/quotes nooit aan. Alle vier de situaties komen voor:
-// Twelve Data, omrekenen van pence, Yahoo als reserve, en terugval op de
-// laatste transactieprijs.
+// Twelve Data, justETF voor een ETF, omrekenen van pence, Yahoo als reserve,
+// en terugval op de laatste transactieprijs.
 export const DEMO_QUOTES: QuoteInfo[] = [
   { ticker: 'ASML', source: 'twelvedata', symbol: 'ASML', currency: 'EUR', price: 780, asOf: '2026-10-05T13:28:00Z' },
   {
@@ -36,6 +37,15 @@ export const DEMO_QUOTES: QuoteInfo[] = [
     price: 1650,
     asOf: '2026-10-05T13:25:00Z',
     note: 'Twelve Data gaf hier geen koers, Yahoo sprong bij',
+  },
+  {
+    ticker: 'VANGUA',
+    source: 'justetf',
+    symbol: 'IE00B3RBWM25',
+    currency: 'EUR',
+    price: 167.14,
+    asOf: '2026-10-05T15:30:00Z',
+    note: 'ETF: opgezocht op ISIN, koers al in euro',
   },
   {
     ticker: 'PROSUS',
@@ -74,6 +84,15 @@ export const DEMO_MARKET: Record<string, MarketInfo> = {
   },
   ADYEN: { live: true, changePct: 0.0215, range52: { low: 1210, high: 1710 }, exchange: 'Euronext Amsterdam', currency: 'EUR', dividends: [] },
   PROSUS: { live: false, exchange: 'Euronext Amsterdam', currency: 'EUR' },
+  VANGUA: {
+    live: true, source: 'justetf', changePct: 0.0086, range52: { low: 136.8, high: 167.37 }, exchange: 'Xetra (Frankfurt)', currency: 'EUR',
+    dividends: [
+      { date: '2025-12-24', amount: 0.62 },
+      { date: '2026-03-26', amount: 0.41 },
+      { date: '2026-06-25', amount: 0.78 },
+      { date: '2026-09-24', amount: 0.55 },
+    ],
+  },
 };
 
 export const DEMO_TRANSACTIONS: Transaction[] = [
@@ -81,9 +100,11 @@ export const DEMO_TRANSACTIONS: Transaction[] = [
   { id: 't2', date: '2026-01-22', ticker: 'ING', type: 'Kopen', quantity: 50, price: 14.9 },
   { id: 't3', date: '2026-02-05', ticker: 'SHELL', type: 'Kopen', quantity: 20, price: 28.4 },
   { id: 't4', date: '2026-02-27', ticker: 'PROSUS', type: 'Kopen', quantity: 25, price: 33.1 },
+  { id: 't14', date: '2026-03-02', ticker: 'VANGUA', type: 'Kopen', quantity: 8, price: 141.2 },
   { id: 't5', date: '2026-03-11', ticker: 'ADYEN', type: 'Kopen', quantity: 1, price: 1420 },
   { id: 't6', date: '2026-04-10', ticker: 'ASML', type: 'Kopen', quantity: 1, price: 720 },
   { id: 't7', date: '2026-05-14', ticker: 'ING', type: 'Kopen', quantity: 30, price: 15.6 },
+  { id: 't15', date: '2026-06-01', ticker: 'VANGUA', type: 'Kopen', quantity: 6, price: 150.6 },
   { id: 't8', date: '2026-06-09', ticker: 'PROSUS', type: 'Kopen', quantity: 15, price: 35.8 },
   { id: 't9', date: '2026-06-18', ticker: 'SHELL', type: 'Kopen', quantity: 15, price: 29.75 },
   { id: 't10', date: '2026-07-02', ticker: 'ASML', type: 'Verkopen', quantity: 1, price: 760 },

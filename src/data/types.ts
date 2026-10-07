@@ -10,7 +10,7 @@ export interface Stock {
 }
 
 /** Waar de koers van één aandeel vandaan komt (zelfde idee als /api/quotes). */
-export type QuoteSource = 'twelvedata' | 'yahoo' | 'transactieprijs';
+export type QuoteSource = 'twelvedata' | 'justetf' | 'finnhub' | 'yahoo' | 'transactieprijs';
 
 export interface QuoteInfo {
   ticker: string;
@@ -43,6 +43,8 @@ export interface MarketInfo {
   asOf?: string | null;
   /** Is dit een echte koers (true) of de laatste transactieprijs (false)? */
   live: boolean;
+  /** Waar de koers vandaan komt (twelvedata, justetf, finnhub, yahoo) */
+  source?: QuoteSource | null;
   /** Uitkeringen van de afgelopen 12 maanden, per aandeel in euro's. Ontbreekt = onbekend, [] = geen dividend. */
   dividends?: { date: string; amount: number }[] | null;
 }
@@ -57,11 +59,6 @@ export interface Transaction {
   quantity: number;
   /** Prijs per aandeel op moment van transactie, in euro's */
   price: number;
-}
-
-export interface ValuePoint {
-  date: string; // ISO yyyy-mm-dd, maandultimo
-  value: number;
 }
 
 export interface StockPosition {

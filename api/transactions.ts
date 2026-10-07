@@ -184,7 +184,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       }
 
-      const tickerKey = ticker.trim().toUpperCase();
+      // De afkorting komt uit de naam (bv. "ISHARE" voor elk iShares-fonds). Twee verschillende
+      // fondsen mogen niet samensmelten: het ISIN beslist. Bekend ISIN -> dat aandeel; zelfde
+      // afkorting maar ander ISIN -> een vrije variant (ISHAR2, ISHAR3, ...).
+      let tickerKey = ticker.trim().toUpperCase();
+      if (isin) {
+        const byIsin: any[] = (await db(`/stocks?select=ticker&isin=eq.${encodeURIComponent(isin)}`)) ?? [];
+        if (byIsin.length > 0) {
+          tickerKey = byIsin[0].ticker;
+        } else {
+          const same: any[] = (await db(`/stocks?select=ticker,isin&ticker=eq.${encodeURIComponent(tickerKey)}`)) ?? [];
+          if (same.length > 0 && same[0].isin && same[0].isin !== isin) {
+            const taken = new Set(((await db('/stocks?select=ticker')) ?? []).map((r: any) => r.ticker));
+            const base = tickerKey.slice(0, 5);
+            let n = 2;
+            while (taken.has(`${base}${n}`) && n < 99) n++;
+            tickerKey = `${base}${n}`;
+          }
+        }
+      }
 
       // Dedup: dezelfde order-mail twee keer verwerkt mag geen dubbele transactie geven
       // en mag de huidige prijs niet terugzetten. Wel vullen we dan een ontbrekende ISIN
