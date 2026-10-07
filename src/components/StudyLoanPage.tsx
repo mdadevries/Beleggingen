@@ -46,7 +46,7 @@ const PHASE_DOT: Record<Phase, string> = {
 const ageIn = (s: LoanSettings, ym: string) => s.ageNow + (ymParse(ym).y - ymParse(s.asOf).y);
 
 export const StudyLoanPage: React.FC<Props> = ({ isDemo, totals, showInvested }) => {
-  const { settings, update, save, saveState, hasSaved, savedAt, loadError } = useLoanSettings(isDemo, totals.totalValue);
+  const { settings, update, save, applyCode, saveState, hasSaved, savedAt, loadError } = useLoanSettings(isDemo, totals.totalValue);
 
   if (!settings) {
     return <p className="text-sm text-[rgb(var(--text-muted))]">Laden…</p>;
@@ -72,6 +72,8 @@ export const StudyLoanPage: React.FC<Props> = ({ isDemo, totals, showInvested })
       {loadError && (
         <p className="text-xs text-[rgb(var(--status-critical))]">Je opgeslagen gegevens konden niet worden geladen. Probeer de pagina opnieuw te laden.</p>
       )}
+
+      {empty && <QuickFill onApply={applyCode} />}
 
       {empty ? (
         <SettingsCard
@@ -705,6 +707,47 @@ const SettingsCard: React.FC<{
                 : 'Wordt bewaard in je eigen database, niet in de openbare code.'}
         </p>
       </div>
+    </Card>
+  );
+};
+
+// ---------- snel invullen met een code ----------
+
+const QuickFill: React.FC<{ onApply: (code: string) => boolean }> = ({ onApply }) => {
+  const [code, setCode] = useState('');
+  const [error, setError] = useState(false);
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(!onApply(code));
+  };
+  return (
+    <Card title="Snel invullen" subtitle="Heb je een invulcode van Claude gekregen? Plak hem hier: alles wordt ingevuld en opgeslagen.">
+      <form onSubmit={submit} className="flex flex-col sm:flex-row gap-2">
+        <input
+          type="text"
+          value={code}
+          onChange={(e) => {
+            setCode(e.target.value);
+            setError(false);
+          }}
+          placeholder="duo1:…"
+          aria-label="Invulcode"
+          spellCheck={false}
+          autoComplete="off"
+          className={`flex-1 min-w-0 rounded-xl border bg-[rgb(var(--surface))] px-3 py-2.5 text-sm font-mono text-[rgb(var(--text-primary))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--series-1))]/40 ${
+            error ? 'border-[rgb(var(--status-critical))]' : 'border-[rgb(var(--border))]'
+          }`}
+        />
+        <button
+          type="submit"
+          disabled={!code.trim()}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[rgb(var(--series-1))] px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+        >
+          <Check className="w-4 h-4" aria-hidden="true" />
+          Invullen en opslaan
+        </button>
+      </form>
+      {error && <p className="mt-2 text-xs text-[rgb(var(--status-critical))]">Deze code klopt niet. Kopieer hem nog een keer helemaal, inclusief "duo1:".</p>}
     </Card>
   );
 };

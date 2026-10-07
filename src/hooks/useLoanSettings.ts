@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { LoanSettings, ymFormat } from '../utils/studyLoan.ts';
+import { LoanSettings, isYm, ymFormat } from '../utils/studyLoan.ts';
 
 /** Voorbeeldgegevens voor de demo (verzonnen, geen echte persoon). */
 export const DEMO_LOAN: LoanSettings = {
@@ -40,6 +40,31 @@ function emptySettings(siteValue: number): LoanSettings {
 }
 
 export type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+
+const CODE_PREFIX = 'duo1:';
+const NUM_KEYS: (keyof LoanSettings)[] = [
+  'debtNow', 'monthlyLoan', 'monthlyGrant', 'ageNow', 'rateLater', 'extraPerMonth', 'salary', 'degiroTotal', 'degiroCash',
+];
+const YM_KEYS: (keyof LoanSettings)[] = ['asOf', 'bachelorEnd', 'lastLoanMonth'];
+
+/**
+ * Leest een invulcode ("duo1:" + base64 van de gegevens). Zo kan Claude je gegevens klaarzetten
+ * zonder dat ze in de openbare code staan. Onbekende of foute velden worden genegeerd.
+ */
+export function decodeLoanCode(code: string): Partial<LoanSettings> | null {
+  const t = code.trim();
+  if (!t.startsWith(CODE_PREFIX)) return null;
+  try {
+    const b64 = t.slice(CODE_PREFIX.length).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = JSON.parse(decodeURIComponent(escape(atob(b64))));
+    const out: Partial<LoanSettings> = {};
+    for (const k of NUM_KEYS) if (typeof raw[k] === 'number' && Number.isFinite(raw[k]) && raw[k] >= 0) (out as any)[k] = raw[k];
+    for (const k of YM_KEYS) if (isYm(raw[k])) (out as any)[k] = raw[k];
+    return Object.keys(out).length > 0 ? out : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Jouw instellingen voor de studieschuld-pagina. Echte sessie: uit /api/loan (database),
@@ -92,13 +117,13 @@ export function useLoanSettings(isDemo: boolean, siteValue: number) {
     setSaveState((st) => (st === 'saved' ? 'idle' : st));
   }, []);
 
-  const save = useCallback(() => {
-    if (isDemo || !settings) return;
+  const saveSettings = useCallback((toSave: LoanSettings) => {
+    if (isDemo) return;
     setSaveState('saving');
     fetch('/api/loan', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ settings }),
+      body: JSON.stringify({ settings: toSave }),
     })
       .then((r) => {
         if (!r.ok) throw new Error(String(r.status));
@@ -110,7 +135,28 @@ export function useLoanSettings(isDemo: boolean, siteValue: number) {
         setSavedAt(d.savedAt);
       })
       .catch(() => setSaveState('error'));
-  }, [isDemo, settings]);
+  }, [isDemo]);
 
-  return { settings, update, save, saveState, hasSaved, savedAt, loadError };
+  const save = useCallback(() => {
+    if (settings) saveSettings(settings);
+  }, [settings, saveSettings]);
+
+  /** Invulcode toepassen en meteen opslaan. Geeft false terug als de code niet klopt. */
+  const applyCode = useCallback(
+    (code: string): boolean => {
+      const patch = decodeLoanCode(code);
+      if (!patch || !settings) return false;
+      const next = { ...settings, ...patch };
+      setSettings(next);
+      if (isDemo) {
+        setHasSaved(true);
+      } else {
+        saveSettings(next);
+      }
+      return true;
+    },
+    [settings, isDemo, saveSettings]
+  );
+
+  return { settings, update, save, applyCode, saveState, hasSaved, savedAt, loadError };
 }
