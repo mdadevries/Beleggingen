@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Stock, Transaction } from '../data/types.ts';
-import { DEMO_STOCKS, DEMO_TRANSACTIONS } from '../data/demoData.ts';
+import { MarketInfo, Stock, Transaction } from '../data/types.ts';
+import { DEMO_MARKET, DEMO_STOCKS, DEMO_TRANSACTIONS } from '../data/demoData.ts';
 
 export type DemoReason = 'account' | 'no-data' | null;
 
@@ -23,6 +23,18 @@ interface PortfolioData {
   error: string | null;
   /** null = (nog) niet geprobeerd of niet van toepassing (demo) */
   quoteStatus: QuoteStatus | null;
+  /** Marktgegevens per ticker (dagverandering, 52-wekenbereik, beurs). */
+  market: Record<string, MarketInfo>;
+}
+
+/** Wat /api/quotes per aandeel teruggeeft (alleen de velden die de site gebruikt). */
+interface ApiQuote {
+  price: number;
+  asOf: string | null;
+  currency?: string;
+  changePct?: number | null;
+  range52?: { low: number; high: number } | null;
+  exchange?: string | null;
 }
 
 /**
@@ -44,6 +56,7 @@ export function usePortfolioData(): PortfolioData {
     loading: true,
     error: null,
     quoteStatus: null,
+    market: DEMO_MARKET,
   });
 
   useEffect(() => {
@@ -67,6 +80,7 @@ export function usePortfolioData(): PortfolioData {
             loading: false,
             error: null,
             quoteStatus: null,
+            market: DEMO_MARKET,
           });
           return; // nooit /api/transactions aanroepen voor een demo-sessie
         }
@@ -87,6 +101,7 @@ export function usePortfolioData(): PortfolioData {
                 loading: false,
                 error: null,
                 quoteStatus: null,
+                market: {},
               });
               loadQuotes(data.stocks);
             } else {
@@ -116,7 +131,7 @@ export function usePortfolioData(): PortfolioData {
           if (!res.ok) throw new Error(`Status ${res.status}`);
           return res.json();
         })
-        .then((data: { quotes: Record<string, { price: number; asOf: string | null }> }) => {
+        .then((data: { quotes: Record<string, ApiQuote> }) => {
           if (cancelled) return;
           const quotes = data.quotes ?? {};
           const live = stocks.filter((s) => quotes[s.ticker]).length;
@@ -126,8 +141,23 @@ export function usePortfolioData(): PortfolioData {
               .filter((t): t is string => !!t)
               .sort()
               .pop() ?? null;
+          const market: Record<string, MarketInfo> = {};
+          for (const s of stocks) {
+            const q = quotes[s.ticker];
+            market[s.ticker] = q
+              ? {
+                  live: true,
+                  changePct: q.changePct ?? null,
+                  range52: q.range52 ?? null,
+                  exchange: q.exchange ?? null,
+                  currency: q.currency ?? null,
+                  asOf: q.asOf,
+                }
+              : { live: false };
+          }
           setState((st) => ({
             ...st,
+            market,
             stocks: st.stocks.map((s) => (quotes[s.ticker] ? { ...s, currentPrice: quotes[s.ticker].price } : s)),
             quoteStatus: { live, total: stocks.length, asOf },
           }));

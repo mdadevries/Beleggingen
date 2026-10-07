@@ -96,3 +96,14 @@
     }
   }
 }
+
+/* Diagram: onthult zich één keer van links naar rechts (bij wisselen van weergave). */
+@keyframes reveal-x {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.reveal-rect {
+  transform-box: fill-box;
+  transform-origin: left center;
+  animation: reveal-x 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}

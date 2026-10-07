@@ -38,6 +38,10 @@ npm run dev
   `/api/transactions` nooit aan, dus er kan ook nooit per ongeluk echte
   portefeuilledata in terechtkomen.
 - **Licht/donker**: knop in de header wisselt tussen apparaat (standaard), licht en donker en onthoudt je keuze. Het thema wordt vóór de eerste paint gezet (geen witte flits), ook op de inlogpagina. Kleuren lopen via tokens in `src/index.css`; de grafiekkleuren (`series-*`) blijven in beide modi gelijk.
+- **Anonieme modus** (oogje in de header): verbergt aantallen stuks en alle bedragen die daaruit volgen (waarde, ingelegd, resultaat in euro's, transactietotalen). Koersen en percentages blijven zichtbaar. Het hoofddiagram schakelt dan naar verdeling/rendement. Keuze blijft staan na verversen (`src/hooks/usePrivacy.tsx`).
+- **Pagina per aandeel** (`#/aandeel/TICKER`, klik op een aandeel): koers, dagverandering, jouw positie, 52-wekenbereik, uitleg (`src/data/stockProfiles.ts`: eigen korte teksten, voeg daar een regel toe voor een nieuw aandeel), en een grafiek met je koop-/verkoopmomenten.
+- **Meebewegend diagram**: gestapeld per aandeel (waarde), verdeling of rendement, met periodekeuze; de cijfers erboven en de lijst eronder lopen mee met je cursor/vinger. Het verloop is een schatting (rechte lijn tussen jouw transactieprijzen en de huidige koers), geen echte koershistorie.
+- `/api/quotes` geeft nu ook dagverandering, 52-wekenbereik en beurs mee (cache-sleutel `quotes:v3`).
 - Rustige, moderne stijl, mobile-first, WCAG 2.2 AA contrast, zichtbare
   focus-ring voor toetsenbordgebruik, `prefers-reduced-motion` gerespecteerd.
 

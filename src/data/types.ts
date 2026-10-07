@@ -29,6 +29,22 @@ export interface QuoteInfo {
   warning?: string;
 }
 
+/** Marktgegevens van /api/quotes (alles optioneel: ontbreekt het, dan tonen we het niet). */
+export interface MarketInfo {
+  /** Verandering t.o.v. vorige slotkoers, als fractie (0.012 = +1,2%) */
+  changePct?: number | null;
+  /** Laagste/hoogste koers van de afgelopen 52 weken, in euro's */
+  range52?: { low: number; high: number } | null;
+  /** Naam van de beurs, bv. "NASDAQ" */
+  exchange?: string | null;
+  /** Valuta waarin het aandeel noteert, bv. "USD" */
+  currency?: string | null;
+  /** Tijdstip van de koers (ISO) */
+  asOf?: string | null;
+  /** Is dit een echte koers (true) of de laatste transactieprijs (false)? */
+  live: boolean;
+}
+
 export type TransactionType = 'Kopen' | 'Verkopen';
 
 export interface Transaction {
@@ -56,6 +72,19 @@ export interface StockPosition {
   currentValue: number;
   profitLoss: number;
   profitLossPct: number;
+  /** Gerealiseerd resultaat op verkochte stukken (zonder kosten) */
+  realized: number;
   /** Aandeel in de totale portefeuille, 0-1 */
   allocation: number;
+}
+
+/** Eén moment in het geschatte waardeverloop van de hele portefeuille. */
+export interface SeriesPoint {
+  date: string; // ISO yyyy-mm-dd
+  t: number; // tijdstip in ms (UTC middernacht)
+  /** Waarde per aandeel (ticker -> euro) */
+  values: Record<string, number>;
+  total: number;
+  /** Ingelegd bedrag (kostenbasis) op dat moment */
+  cost: number;
 }

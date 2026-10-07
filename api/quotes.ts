@@ -15,7 +15,7 @@ import crypto from 'crypto';
 // compileert elk bestand onder /api los, relatieve imports bestaan op de
 // server niet. Houd de auth-constanten gelijk aan de andere /api-bestanden.
 
-const CACHE_KEY = 'quotes:v2';
+const CACHE_KEY = 'quotes:v3';
 const CACHE_TTL_SECONDS = 300; // 5 minuten
 const REQUEST_TIMEOUT_MS = 3500;
 
@@ -65,6 +65,12 @@ interface Quote {
   asOf: string | null;
   /** Gevuld als de koers sterk afwijkt van je laatste transactieprijs */
   warning?: string;
+  /** Verandering t.o.v. vorige slotkoers als fractie (0.012 = +1,2%), indien bekend */
+  changePct?: number | null;
+  /** 52-wekenbereik in euro's, indien bekend */
+  range52?: { low: number; high: number } | null;
+  /** Naam van de beurs, indien bekend */
+  exchange?: string | null;
 }
 
 interface QuotesResponse {
@@ -180,6 +186,16 @@ interface RawQuote {
   currency: string;
   asOf: string | null;
   matchedBy: 'map' | 'isin';
+  /** Extra marktgegevens; range52 staat nog in de valuta van de bron */
+  changePct?: number | null;
+  range52?: { low: number; high: number } | null;
+  exchange?: string | null;
+}
+
+/** Leest een getal uit een tekst of getal; anders null. */
+function num(v: unknown): number | null {
+  const n = typeof v === 'number' ? v : Number.parseFloat(String(v));
+  return Number.isFinite(n) ? n : null;
 }
 
 async function tdQuote(stock: StoredStock): Promise<RawQuote> {
@@ -204,12 +220,19 @@ async function tdQuote(stock: StoredStock): Promise<RawQuote> {
     throw new Error('Geen bruikbare koers in Twelve Data-antwoord');
   }
   const t = Number(data?.last_quote_at ?? data?.timestamp);
+  const pct = num(data?.percent_change);
+  const lo = num(data?.fifty_two_week?.low);
+  const hi = num(data?.fifty_two_week?.high);
   return {
     symbol: String(data?.symbol ?? mapped?.symbol ?? stock.isin),
     price,
     currency,
     asOf: Number.isFinite(t) && t > 0 ? new Date(t * 1000).toISOString() : null,
     matchedBy,
+    // Twelve Data geeft percent_change als "1.24" (procent), wij willen een fractie.
+    changePct: pct === null ? null : pct / 100,
+    range52: lo !== null && hi !== null && lo > 0 && hi > 0 ? { low: lo, high: hi } : null,
+    exchange: typeof data?.exchange === 'string' && data.exchange ? data.exchange : null,
   };
 }
 
@@ -241,7 +264,14 @@ async function yahooResolveIsin(isin: string): Promise<string | null> {
   return hit ? hit.symbol : null;
 }
 
-async function yahooChart(symbol: string): Promise<{ price: number; currency: string; asOf: string | null }> {
+async function yahooChart(symbol: string): Promise<{
+  price: number;
+  currency: string;
+  asOf: string | null;
+  changePct: number | null;
+  range52: { low: number; high: number } | null;
+  exchange: string | null;
+}> {
   const data = await yahooJson(`/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1d`);
   const meta = data?.chart?.result?.[0]?.meta;
   const price = meta?.regularMarketPrice;
@@ -250,7 +280,17 @@ async function yahooChart(symbol: string): Promise<{ price: number; currency: st
     throw new Error('Geen bruikbare koers in Yahoo-antwoord');
   }
   const t = meta?.regularMarketTime;
-  return { price, currency, asOf: typeof t === 'number' ? new Date(t * 1000).toISOString() : null };
+  const prev = num(meta?.chartPreviousClose ?? meta?.previousClose);
+  const lo = num(meta?.fiftyTwoWeekLow);
+  const hi = num(meta?.fiftyTwoWeekHigh);
+  return {
+    price,
+    currency,
+    asOf: typeof t === 'number' ? new Date(t * 1000).toISOString() : null,
+    changePct: prev && prev > 0 ? price / prev - 1 : null,
+    range52: lo !== null && hi !== null && lo > 0 && hi > 0 ? { low: lo, high: hi } : null,
+    exchange: typeof meta?.fullExchangeName === 'string' ? meta.fullExchangeName : null,
+  };
 }
 
 async function yahooQuote(stock: StoredStock, db: Db): Promise<RawQuote> {
@@ -265,7 +305,16 @@ async function yahooQuote(stock: StoredStock, db: Db): Promise<RawQuote> {
     await db(`/stocks?ticker=eq.${encodeURIComponent(stock.ticker)}`, { method: 'PATCH', body: { symbol } });
   }
   const m = await yahooChart(symbol);
-  return { symbol, price: m.price, currency: m.currency, asOf: m.asOf, matchedBy: matchedBy as 'map' | 'isin' };
+  return {
+    symbol,
+    price: m.price,
+    currency: m.currency,
+    asOf: m.asOf,
+    matchedBy: matchedBy as 'map' | 'isin',
+    changePct: m.changePct,
+    range52: m.range52,
+    exchange: m.exchange,
+  };
 }
 
 // ---------- Omrekenen en samenvoegen ----------
@@ -334,7 +383,30 @@ async function quoteForStock(
     }
   }
 
-  return { price, symbol: raw.symbol, currency: raw.currency, source, matchedBy: raw.matchedBy, asOf: raw.asOf, warning };
+  // 52-wekenbereik op dezelfde manier naar euro omrekenen (wisselkoers zit al in fxCache).
+  let range52: Quote['range52'] = null;
+  if (raw.range52) {
+    try {
+      const low = await toEuro(raw.range52.low, raw.currency, fxCache, takeCredit);
+      const high = await toEuro(raw.range52.high, raw.currency, fxCache, takeCredit);
+      range52 = { low: Math.round(low * 100) / 100, high: Math.round(high * 100) / 100 };
+    } catch {
+      range52 = null; // bijzaak: de koers zelf mag hier niet door falen
+    }
+  }
+
+  return {
+    price,
+    symbol: raw.symbol,
+    currency: raw.currency,
+    source,
+    matchedBy: raw.matchedBy,
+    asOf: raw.asOf,
+    warning,
+    changePct: raw.changePct ?? null,
+    range52,
+    exchange: raw.exchange ?? null,
+  };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

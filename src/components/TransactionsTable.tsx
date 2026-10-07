@@ -3,13 +3,15 @@ import { ArrowUpDown, Search } from 'lucide-react';
 import { Stock, Transaction } from '../data/types.ts';
 import { TransactionBadge } from './TransactionBadge.tsx';
 import { formatDate, formatEuroPrecise } from '../utils/portfolio.ts';
+import { Private } from '../hooks/usePrivacy.tsx';
 
 interface TransactionsTableProps {
   transactions: Transaction[];
   stocks: Stock[];
+  onSelectStock?: (ticker: string) => void;
 }
 
-export const TransactionsTable: React.FC<TransactionsTableProps> = ({ transactions, stocks }) => {
+export const TransactionsTable: React.FC<TransactionsTableProps> = ({ transactions, stocks, onSelectStock }) => {
   const [tickerFilter, setTickerFilter] = useState<string>('alle');
   const [query, setQuery] = useState('');
   const [sortAsc, setSortAsc] = useState(false); // standaard: nieuwste eerst
@@ -96,7 +98,9 @@ export const TransactionsTable: React.FC<TransactionsTableProps> = ({ transactio
                   {formatDate(tx.date)}
                 </td>
                 <td className="py-3 px-3 font-semibold text-[rgb(var(--text-primary))]">
-                  {tx.ticker}
+                  <button type="button" onClick={() => onSelectStock?.(tx.ticker)} className="hover:underline font-semibold">
+                    {tx.ticker}
+                  </button>
                   <span className="hidden md:inline text-[rgb(var(--text-muted))] font-normal">
                     {' '}
                     · {stockByTicker.get(tx.ticker)?.name}
@@ -106,13 +110,13 @@ export const TransactionsTable: React.FC<TransactionsTableProps> = ({ transactio
                   <TransactionBadge type={tx.type} />
                 </td>
                 <td className="py-3 px-3 text-right tabular text-[rgb(var(--text-secondary))]">
-                  {tx.quantity}
+                  <Private>{tx.quantity}</Private>
                 </td>
                 <td className="py-3 px-3 text-right tabular text-[rgb(var(--text-secondary))]">
                   {formatEuroPrecise(tx.price)}
                 </td>
                 <td className="py-3 px-4 sm:px-3 text-right tabular font-semibold text-[rgb(var(--text-primary))]">
-                  {formatEuroPrecise(tx.quantity * tx.price)}
+                  <Private>{formatEuroPrecise(tx.quantity * tx.price)}</Private>
                 </td>
               </tr>
             ))}

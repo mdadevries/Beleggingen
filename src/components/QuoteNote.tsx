@@ -11,7 +11,7 @@ export const QuoteNote: React.FC<{ status: QuoteStatus | null }> = ({ status }) 
     const when = status.asOf
       ? new Intl.DateTimeFormat('nl-NL', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(status.asOf))
       : null;
-    text = `Koersen: Yahoo Finance, licht vertraagd${when ? ` · laatste koers ${when}` : ''}.`;
+    text = `Live koersen (Twelve Data / Yahoo), licht vertraagd${when ? ` · laatste koers ${when}` : ''}.`;
   } else if (status.live === 0) {
     text = 'Live koersen niet beschikbaar: waarde en resultaat zijn gebaseerd op je laatste transactieprijs per aandeel.';
   } else {

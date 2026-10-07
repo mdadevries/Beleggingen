@@ -1,4 +1,4 @@
-import { QuoteInfo, Stock, Transaction } from './types.ts';
+import { MarketInfo, QuoteInfo, Stock, Transaction } from './types.ts';
 
 // Demodata — geen koppeling met een echte broker of bankrekening (zie
 // privacy-overweging: voor de eerste versie tonen we alleen voorbeelddata).
@@ -44,6 +44,15 @@ export const DEMO_QUOTES: QuoteInfo[] = [
     note: 'Geen live koers gevonden, dit is je laatste transactieprijs',
   },
 ];
+
+// Marktgegevens voor de demo-detailpagina's (verzonnen voorbeeldwaarden).
+export const DEMO_MARKET: Record<string, MarketInfo> = {
+  ASML: { live: true, changePct: 0.0124, range52: { low: 590, high: 835 }, exchange: 'Euronext Amsterdam', currency: 'EUR' },
+  SHELL: { live: true, changePct: -0.0061, range52: { low: 26.1, high: 33.4 }, exchange: 'Londen (LSE)', currency: 'GBp' },
+  ING: { live: true, changePct: 0.0042, range52: { low: 13.8, high: 17.9 }, exchange: 'Euronext Amsterdam', currency: 'EUR' },
+  ADYEN: { live: true, changePct: 0.0215, range52: { low: 1210, high: 1710 }, exchange: 'Euronext Amsterdam', currency: 'EUR' },
+  PROSUS: { live: false, exchange: 'Euronext Amsterdam', currency: 'EUR' },
+};
 
 export const DEMO_TRANSACTIONS: Transaction[] = [
   { id: 't1', date: '2026-01-15', ticker: 'ASML', type: 'Kopen', quantity: 2, price: 680 },

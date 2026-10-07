@@ -2,9 +2,11 @@ import React from 'react';
 import { StockPosition } from '../data/types.ts';
 import { seriesColor } from '../utils/colors.ts';
 import { formatEuro, formatPercent } from '../utils/portfolio.ts';
+import { usePrivacy } from '../hooks/usePrivacy.tsx';
 
 interface AllocationBarProps {
   positions: StockPosition[];
+  onSelect?: (ticker: string) => void;
 }
 
 /**
@@ -12,7 +14,8 @@ interface AllocationBarProps {
  * Elk segment >= 8% krijgt een direct label; kleinere segmenten leunen op
  * de legenda eronder. 2px surface-gap tussen segmenten i.p.v. een rand.
  */
-export const AllocationBar: React.FC<AllocationBarProps> = ({ positions }) => {
+export const AllocationBar: React.FC<AllocationBarProps> = ({ positions, onSelect }) => {
+  const { hidden } = usePrivacy();
   if (positions.length === 0) {
     return (
       <p className="text-sm text-[rgb(var(--text-muted))] italic">
@@ -39,9 +42,9 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({ positions }) => {
               backgroundColor: seriesColor(p.stock.colorSlot),
               marginLeft: idx === 0 ? 0 : 2,
             }}
-            title={`${p.stock.name}: ${formatPercent(p.allocation).replace('+', '')} · ${formatEuro(
-              p.currentValue
-            )}`}
+            title={`${p.stock.name}: ${formatPercent(p.allocation).replace('+', '')}${
+              hidden ? '' : ` · ${formatEuro(p.currentValue)}`
+            }`}
           >
             {p.allocation >= 0.08 && (
               <span
@@ -59,7 +62,12 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({ positions }) => {
       {/* Legenda — altijd aanwezig bij >=2 series, draagt de identiteit */}
       <ul className="mt-3.5 flex flex-wrap gap-x-4 gap-y-2">
         {positions.map((p) => (
-          <li key={p.stock.ticker} className="flex items-center gap-1.5 text-xs">
+          <li key={p.stock.ticker}>
+           <button
+             type="button"
+             onClick={() => onSelect?.(p.stock.ticker)}
+             className="flex items-center gap-1.5 text-xs rounded-md px-1 -mx-1 py-0.5 hover:bg-[rgb(var(--surface-sunken))]"
+           >
             <span
               className="w-2.5 h-2.5 rounded-full shrink-0"
               style={{ backgroundColor: seriesColor(p.stock.colorSlot) }}
@@ -69,6 +77,7 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({ positions }) => {
             <span className="text-[rgb(var(--text-muted))]">
               {formatPercent(p.allocation).replace('+', '')}
             </span>
+           </button>
           </li>
         ))}
       </ul>
