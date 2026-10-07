@@ -496,6 +496,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       else body.failed.push({ ticker, reason: errMsg(r.reason) });
     });
 
+    // Eén regel per aandeel in de Vercel-logs: zo zie je waarom een koers (niet) lukte.
+    // Bevat geen sleutels of bedragen van jou, alleen ticker, bron en foutmelding.
+    for (const [ticker, q] of Object.entries(body.quotes)) {
+      console.log(`[quotes] ${ticker}: ok via ${q.source} (${q.symbol}, ${q.currency}, ${q.matchedBy})${q.warning ? ' WAARSCHUWING: ' + q.warning : ''}${q.dividends ? ` dividend:${q.dividends.length}` : ' dividend:onbekend'}`);
+    }
+    for (const f of body.failed) console.log(`[quotes] ${f.ticker}: MISLUKT - ${f.reason}`);
+
     // Bij (deels) mislukte ronde maar kort cachen: een tijdelijke hapering
     // mag niet 5 minuten blijven hangen, maar een onvindbaar aandeel mag de
     // bronnen ook niet bij elke paginalaad opnieuw bestoken.
