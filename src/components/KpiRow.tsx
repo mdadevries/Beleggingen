@@ -1,7 +1,7 @@
 import React from 'react';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import { StockPosition } from '../data/types.ts';
-import { PortfolioTotals, formatEuro, formatPercent, formatPercentPlain } from '../utils/portfolio.ts';
+import { PortfolioTotals, formatEuro, formatPercent } from '../utils/portfolio.ts';
 import { Private, usePrivacy } from '../hooks/usePrivacy.tsx';
 
 interface KpiRowProps {
@@ -9,6 +9,8 @@ interface KpiRowProps {
   positions: StockPosition[];
   /** Toon het ingelegde bedrag alleen als de data dat betrouwbaar aankan. */
   showInvested: boolean;
+  /** Verandering van vandaag (alleen als er voor het grootste deel live koersen zijn) */
+  today: { amount: number; pct: number } | null;
   onSelectStock: (ticker: string) => void;
 }
 
@@ -29,11 +31,10 @@ const Stat: React.FC<{ label: string; children: React.ReactNode; onClick?: () =>
 };
 
 /** Bovenaan: totale waarde en resultaat groot, daaronder de belangrijkste kerncijfers. */
-export const KpiRow: React.FC<KpiRowProps> = ({ totals, positions, showInvested, onSelectStock }) => {
+export const KpiRow: React.FC<KpiRowProps> = ({ totals, positions, showInvested, today, onSelectStock }) => {
   const isPositive = totals.totalProfitLoss >= 0;
   const withCost = positions.filter((p) => p.invested > 0);
   const best = withCost.length > 1 ? [...withCost].sort((a, b) => b.profitLossPct - a.profitLossPct)[0] : null;
-  const largest = positions.length > 1 ? positions[0] : null;
 
   const { hidden } = usePrivacy();
   const resultColor = isPositive ? 'text-[rgb(var(--status-good))]' : 'text-[rgb(var(--status-critical))]';
@@ -70,18 +71,21 @@ export const KpiRow: React.FC<KpiRowProps> = ({ totals, positions, showInvested,
             <Private>{formatEuro(totals.totalInvested)}</Private>
           </Stat>
         )}
-        <Stat label="Aantal aandelen">{totals.numberOfStocks}</Stat>
+        {today && (
+          <Stat label="Vandaag">
+            <span className={today.amount >= 0 ? 'text-[rgb(var(--status-good))]' : 'text-[rgb(var(--status-critical))]'}>
+              {hidden ? '' : <>{formatEuro(today.amount)} </>}
+              <span className={hidden ? '' : 'text-sm'}>{hidden ? formatPercent(today.pct) : `(${formatPercent(today.pct)})`}</span>
+            </span>
+          </Stat>
+        )}
+        <Stat label="Posities">{totals.numberOfStocks}</Stat>
         {best && (
           <Stat label="Beste aandeel" onClick={() => onSelectStock(best.stock.ticker)}>
             {best.stock.ticker}{' '}
             <span className={best.profitLossPct >= 0 ? 'text-[rgb(var(--status-good))]' : 'text-[rgb(var(--status-critical))]'}>
               {formatPercent(best.profitLossPct)}
             </span>
-          </Stat>
-        )}
-        {largest && (
-          <Stat label="Grootste positie" onClick={() => onSelectStock(largest.stock.ticker)}>
-            {largest.stock.ticker} <span className="text-[rgb(var(--text-secondary))]">{formatPercentPlain(largest.allocation, 0)}</span>
           </Stat>
         )}
       </dl>

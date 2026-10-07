@@ -43,6 +43,8 @@ export interface MarketInfo {
   asOf?: string | null;
   /** Is dit een echte koers (true) of de laatste transactieprijs (false)? */
   live: boolean;
+  /** Uitkeringen van de afgelopen 12 maanden, per aandeel in euro's. Ontbreekt = onbekend, [] = geen dividend. */
+  dividends?: { date: string; amount: number }[] | null;
 }
 
 export type TransactionType = 'Kopen' | 'Verkopen';

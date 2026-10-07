@@ -1,6 +1,5 @@
 import React from 'react';
 import { StockPosition } from '../data/types.ts';
-import { seriesColor } from '../utils/colors.ts';
 import { formatPercent, formatPercentPlain } from '../utils/portfolio.ts';
 import { useElementWidth } from '../hooks/useElementWidth.ts';
 
@@ -88,35 +87,41 @@ export const Treemap: React.FC<TreemapProps> = ({ positions, onSelect }) => {
       <div className="relative w-full overflow-hidden rounded-xl" style={{ height }}>
         {tiles.map((t) => {
           const { p } = t;
-          const dark = p.stock.colorSlot >= 3;
-          const big = t.w * t.h > 1400;
+          const pct = p.invested > 0 ? p.profitLossPct : 0;
+          // Hoe groter de winst of het verlies, hoe sterker de kleur (vanaf 15% volledig).
+          const strength = Math.min(1, Math.abs(pct) / 0.15);
+          const base = pct >= 0 ? 'rgb(var(--tile-good))' : 'rgb(var(--status-critical))';
+          const light = strength > 0.4;
+          const showName = t.w >= 15 && t.h >= 17;
+          const showMore = showName && t.w * t.h > 1400;
           return (
             <button
               key={p.stock.ticker}
               type="button"
               onClick={() => onSelect(p.stock.ticker)}
-              className="absolute flex flex-col items-start justify-start text-left p-2.5 sm:p-3 transition-[filter] hover:brightness-110 focus-visible:z-10"
+              title={`${p.stock.name}: ${formatPercentPlain(p.allocation, 1)} van je portefeuille${p.invested > 0 ? `, ${formatPercent(pct)}` : ''}`}
+              className="absolute flex flex-col items-start justify-start text-left p-2.5 sm:p-3 overflow-hidden hover:brightness-110 focus-visible:z-10"
               style={{
                 left: `${(t.x / (100 * aspect)) * 100}%`,
                 top: `${t.y}%`,
                 width: `${(t.w / (100 * aspect)) * 100}%`,
                 height: `${t.h}%`,
-                backgroundColor: seriesColor(p.stock.colorSlot),
-                color: dark ? '#1f2937' : '#ffffff',
+                backgroundColor: `color-mix(in srgb, ${base} ${Math.round(18 + strength * 77)}%, rgb(var(--surface-sunken)))`,
+                color: light ? '#ffffff' : 'rgb(var(--text-primary))',
                 boxShadow: 'inset 0 0 0 2px rgb(var(--surface))',
               }}
-              aria-label={`${p.stock.name}: ${formatPercentPlain(p.allocation, 0)} van je portefeuille`}
+              aria-label={`${p.stock.name}: ${formatPercentPlain(p.allocation, 1)} van je portefeuille`}
             >
-              <span className="block text-sm font-bold leading-tight truncate">{p.stock.ticker}</span>
-              <span className="block text-xs font-semibold opacity-90 tabular">{formatPercentPlain(p.allocation, 0)}</span>
-              {big && p.invested > 0 && (
-                <span className="block mt-1 text-xs opacity-80 tabular">{formatPercent(p.profitLossPct)}</span>
-              )}
+              {showName && <span className="block text-sm font-bold leading-tight truncate max-w-full">{p.stock.ticker}</span>}
+              {showName && <span className="block text-xs font-semibold opacity-90 tabular">{formatPercentPlain(p.allocation, 0)}</span>}
+              {showMore && p.invested > 0 && <span className="block mt-1 text-xs opacity-90 tabular">{formatPercent(pct)}</span>}
             </button>
           );
         })}
       </div>
-      <p className="mt-2 text-xs text-[rgb(var(--text-muted))]">Grootte = deel van je portefeuille. Klein getal = rendement sinds aankoop.</p>
+      <p className="mt-3 text-xs text-[rgb(var(--text-muted))]">
+        Grootte = deel van je portefeuille. Kleur = rendement sinds aankoop: groen is winst, rood is verlies, hoe donkerder hoe meer.
+      </p>
     </div>
   );
 };

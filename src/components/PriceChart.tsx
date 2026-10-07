@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import { Stock, Transaction } from '../data/types.ts';
-import { seriesColor } from '../utils/colors.ts';
 import { formatDate, formatDateShort, formatEuroPrecise } from '../utils/portfolio.ts';
 import { niceScale } from '../utils/scale.ts';
 import { Private } from '../hooks/usePrivacy.tsx';
@@ -67,7 +66,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({ stock, transactions, avg
     return { xOf, yOf, ticks: sc.ticks, path };
   }, [points, avgBuyPrice, PLOT_W, PLOT_H]);
 
-  const color = seriesColor(stock.colorSlot);
+  const color = 'rgb(var(--series-1))';
   const idx = hoverIdx ?? points.length - 1;
   const p = points[idx];
 

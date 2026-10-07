@@ -60,6 +60,61 @@ export const STOCK_PROFILES: StockProfile[] = [
     about: 'Beleggingsbedrijf in internetbedrijven wereldwijd, zoals online marktplaatsen en bezorgdiensten. Heeft ook een groot belang in het Chinese Tencent.',
   },
   {
+    match: /galaxy/i,
+    kind: 'Aandeel',
+    sector: 'Crypto',
+    country: 'Verenigde Staten',
+    about: 'Amerikaans financieel bedrijf voor crypto en digitale activa: handel, vermogensbeheer en datacenters.',
+  },
+  {
+    match: /uipath/i,
+    kind: 'Aandeel',
+    sector: 'Software',
+    country: 'Verenigde Staten',
+    about: 'Maakt software die saaie, steeds terugkerende kantoortaken automatiseert met robots en AI.',
+  },
+  {
+    match: /paypal/i,
+    kind: 'Aandeel',
+    sector: 'Betalen',
+    country: 'Verenigde Staten',
+    about: 'Online betaaldienst waarmee mensen en webshops veilig geld versturen en ontvangen.',
+  },
+  {
+    match: /servicenow|\bservic\b/i,
+    kind: 'Aandeel',
+    sector: 'Software',
+    country: 'Verenigde Staten',
+    about: 'Cloudsoftware waarmee grote bedrijven hun werkprocessen regelen, bijvoorbeeld IT-hulp en klantenservice.',
+  },
+  {
+    match: /oscar/i,
+    kind: 'Aandeel',
+    sector: 'Zorgverzekering',
+    country: 'Verenigde Staten',
+    about: 'Amerikaanse zorgverzekeraar die met een app en simpele tarieven zorgverzekeringen aanbiedt.',
+  },
+  {
+    match: /\bsnap\b/i,
+    kind: 'Aandeel',
+    sector: 'Sociale media',
+    country: 'Verenigde Staten',
+    about: 'Het bedrijf achter Snapchat, de berichten- en camera-app die vooral jongeren gebruiken.',
+  },
+  {
+    match: /s&p ?500|sp500|issp/i,
+    kind: 'ETF',
+    sector: 'Amerikaanse aandelen',
+    country: 'Verenigde Staten',
+    about: 'Een ETF die de S&P 500 volgt: de 500 grootste beursgenoteerde bedrijven van de Verenigde Staten.',
+  },
+  {
+    match: /all-?world|ftse/i,
+    kind: 'ETF',
+    sector: 'Wereldwijd gespreid',
+    about: 'Een ETF met bedrijven uit de hele wereld, ontwikkelde landen én opkomende markten, in één aankoop.',
+  },
+  {
     match: /msci world/i,
     kind: 'ETF',
     sector: 'Wereldwijd gespreid',
@@ -77,4 +132,11 @@ export const STOCK_PROFILES: StockProfile[] = [
 export function findProfile(stock: Pick<Stock, 'ticker' | 'name'>): StockProfile | null {
   const haystack = `${stock.ticker} ${stock.name}`;
   return STOCK_PROFILES.find((p) => p.match.test(haystack)) ?? null;
+}
+
+/** Is dit een ETF/indexfonds (en geen losse aandelen)? Eerst het profiel, anders op de naam. */
+export function isEtf(stock: Pick<Stock, 'ticker' | 'name'>): boolean {
+  const profile = findProfile(stock);
+  if (profile) return profile.kind === 'ETF';
+  return /\betf\b|ucits|ishares|vanguard|spdr|xtrackers|amundi|lyxor|index fund|tracker/i.test(stock.name);
 }

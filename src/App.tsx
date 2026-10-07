@@ -3,8 +3,7 @@ import { Nav } from './components/Nav.tsx';
 import { Card } from './components/Card.tsx';
 import { KpiRow } from './components/KpiRow.tsx';
 import { QuoteNote } from './components/QuoteNote.tsx';
-import { AllocationBar } from './components/AllocationBar.tsx';
-import { PortfolioChart } from './components/PortfolioChart.tsx';
+import { PortfolioViews } from './components/PortfolioViews.tsx';
 import { StockList } from './components/StockList.tsx';
 import { StockDetail } from './components/StockDetail.tsx';
 import { RecentTransactions } from './components/RecentTransactions.tsx';
@@ -14,6 +13,11 @@ import { DEMO_QUOTES } from './data/demoData.ts';
 import { usePortfolioData } from './hooks/usePortfolioData.ts';
 import { useHashRoute } from './hooks/useHashRoute.ts';
 import { computeAllPositions, computeSeries, computeTotals } from './utils/portfolio.ts';
+import { assignColors } from './utils/colors.ts';
+import { DividendCard } from './components/DividendCard.tsx';
+import { EtfSplitCard } from './components/EtfSplitCard.tsx';
+import { ExportBar } from './components/ExportBar.tsx';
+import { exportPositionsCsv, exportTransactionsCsv } from './utils/exportData.ts';
 
 export default function App() {
   const { route, goPage, goStock } = useHashRoute();
@@ -28,6 +32,25 @@ export default function App() {
     [allPositions]
   );
   const totals = useMemo(() => computeTotals(positions), [positions]);
+  const colors = useMemo(() => assignColors(positions), [positions]);
+
+  // Verandering van vandaag: alleen tonen als voor het grootste deel van je geld een live dagverandering bekend is.
+  const today = useMemo(() => {
+    let covered = 0;
+    let before = 0;
+    let now = 0;
+    for (const p of positions) {
+      const pct = market[p.stock.ticker]?.changePct;
+      if (market[p.stock.ticker]?.live && pct != null && pct > -0.99) {
+        covered += p.currentValue;
+        now += p.currentValue;
+        before += p.currentValue / (1 + pct);
+      }
+    }
+    const total = positions.reduce((s, p) => s + p.currentValue, 0);
+    if (total <= 0 || covered / total < 0.8 || before <= 0) return null;
+    return { amount: now - before, pct: now / before - 1 };
+  }, [positions, market]);
   const series = useMemo(() => computeSeries(stocks, transactions), [stocks, transactions]);
 
   // Ingelegd bedrag alleen tonen als elke positie een betrouwbare kostenbasis heeft.
@@ -51,6 +74,7 @@ export default function App() {
             position={detail}
             transactions={transactions}
             market={market[detail.stock.ticker]}
+            color={colors[detail.stock.ticker]}
             onBack={() => goPage('overzicht')}
           />
         ) : page === 'koersen' ? (
@@ -64,37 +88,54 @@ export default function App() {
           </>
         ) : page === 'overzicht' ? (
           <>
-            <KpiRow totals={totals} positions={positions} showInvested={showInvested} onSelectStock={goStock} />
+            <KpiRow totals={totals} positions={positions} showInvested={showInvested} today={today} onSelectStock={goStock} />
             {!isDemo && <QuoteNote status={quoteStatus} />}
 
-            <Card title="Waardeverloop" subtitle="Geschat op basis van je transacties. Beweeg over de grafiek voor details.">
-              <PortfolioChart series={series} stocks={stocks} onSelectStock={goStock} />
-            </Card>
+            <PortfolioViews
+              positions={positions}
+              totals={totals}
+              showInvested={showInvested}
+              series={series}
+              colors={colors}
+              onSelectStock={goStock}
+            />
 
-            <div className="grid lg:grid-cols-5 gap-5 items-start">
-              <Card title="Mijn aandelen" subtitle="Klik op een aandeel voor het overzicht" className="lg:col-span-3">
-                <StockList positions={positions} market={market} onSelect={goStock} />
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 items-start">
+              <Card title="Mijn aandelen" subtitle="Klik op een aandeel voor het overzicht" className="lg:col-span-3 min-w-0">
+                <StockList positions={positions} market={market} colors={colors} onSelect={goStock} />
               </Card>
 
-              <div className="lg:col-span-2 space-y-5">
-                <Card title="Verdeling" subtitle="Waar je geld op dit moment in zit">
-                  <AllocationBar positions={positions} onSelect={goStock} />
-                </Card>
-                <Card title="Laatste transacties">
-                  <RecentTransactions transactions={transactions} limit={5} onSelectStock={goStock} />
-                  <button
-                    type="button"
-                    onClick={() => goPage('transacties')}
-                    className="mt-3 text-sm font-semibold text-[rgb(var(--accent-text))] hover:underline"
-                  >
-                    Alle transacties bekijken →
-                  </button>
-                </Card>
-              </div>
+              <Card title="Laatste transacties" className="lg:col-span-2 min-w-0">
+                <RecentTransactions transactions={transactions} limit={5} onSelectStock={goStock} />
+                <button
+                  type="button"
+                  onClick={() => goPage('transacties')}
+                  className="mt-3 text-sm font-semibold text-[rgb(var(--accent-text))] hover:underline"
+                >
+                  Alle transacties bekijken →
+                </button>
+              </Card>
             </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+              <EtfSplitCard positions={positions} onSelectStock={goStock} />
+              <DividendCard
+                positions={positions}
+                transactions={transactions}
+                market={market}
+                colors={colors}
+                onSelectStock={goStock}
+              />
+            </div>
+
+            <ExportBar csvLabel="Posities (CSV)" onCsv={() => exportPositionsCsv(positions)} />
           </>
         ) : (
-          <Card title="Transacties" subtitle={`${transactions.length} transacties in totaal`}>
+          <Card
+            title="Transacties"
+            subtitle={`${transactions.length} transacties in totaal`}
+            action={<ExportBar csvLabel="Transacties (CSV)" onCsv={() => exportTransactionsCsv(transactions, stocks)} />}
+          >
             <TransactionsTable transactions={transactions} stocks={stocks} onSelectStock={goStock} />
           </Card>
         )}

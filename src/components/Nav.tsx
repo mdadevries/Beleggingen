@@ -29,7 +29,7 @@ export const Nav: React.FC<NavProps> = ({ page, onNavigate, isDemo, demoReason }
   ];
 
   return (
-    <header className="sticky top-0 z-20 bg-[rgb(var(--surface))]/90 backdrop-blur-md border-b border-[rgb(var(--border))]">
+    <header className="no-print sticky top-0 z-20 bg-[rgb(var(--surface))]/90 backdrop-blur-md border-b border-[rgb(var(--border))]">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
         <button
           type="button"

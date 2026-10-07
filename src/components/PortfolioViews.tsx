@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SeriesPoint, Stock, StockPosition } from '../data/types.ts';
+import { SeriesPoint, StockPosition } from '../data/types.ts';
 import { PortfolioTotals } from '../utils/portfolio.ts';
 import { Card } from './Card.tsx';
 import { DonutChart } from './DonutChart.tsx';
@@ -10,10 +10,10 @@ import { PortfolioChart } from './PortfolioChart.tsx';
 type View = 'cirkel' | 'rendement' | 'blokken' | 'verloop';
 
 const VIEWS: { id: View; label: string; subtitle: string }[] = [
-  { id: 'cirkel', label: 'Cirkel', subtitle: 'Waar je geld in zit. Wijs een stuk aan voor details.' },
-  { id: 'rendement', label: 'Rendement', subtitle: 'Winst of verlies per aandeel sinds aankoop.' },
-  { id: 'blokken', label: 'Blokken', subtitle: 'Hoe groter het blok, hoe groter je positie.' },
-  { id: 'verloop', label: 'Verloop', subtitle: 'Geschat verloop in de tijd. Beweeg over de grafiek.' },
+  { id: 'cirkel', label: 'Verdeling', subtitle: 'Je vijf grootste posities in kleur, de rest samen als Overig.' },
+  { id: 'rendement', label: 'Rendement', subtitle: 'Winst of verlies per aandeel sinds aankoop, van best naar slechtst.' },
+  { id: 'blokken', label: 'Blokken', subtitle: 'Hoe groter het blok, hoe groter je positie. De kleur toont je rendement.' },
+  { id: 'verloop', label: 'Verloop', subtitle: 'Wat je portefeuille waard is ten opzichte van wat je hebt ingelegd (geschat). Beweeg over de grafiek.' },
 ];
 const STORAGE_KEY = 'beleggingen_view';
 
@@ -32,12 +32,12 @@ interface PortfolioViewsProps {
   totals: PortfolioTotals;
   showInvested: boolean;
   series: SeriesPoint[];
-  stocks: Stock[];
+  colors: Record<string, string>;
   onSelectStock: (ticker: string) => void;
 }
 
 /** Eén kaart, vier manieren om naar je portefeuille te kijken. Je keuze wordt onthouden. */
-export const PortfolioViews: React.FC<PortfolioViewsProps> = ({ positions, totals, showInvested, series, stocks, onSelectStock }) => {
+export const PortfolioViews: React.FC<PortfolioViewsProps> = ({ positions, totals, showInvested, series, colors, onSelectStock }) => {
   const [view, setView] = useState<View>(readView);
   const current = VIEWS.find((v) => v.id === view)!;
 
@@ -51,7 +51,7 @@ export const PortfolioViews: React.FC<PortfolioViewsProps> = ({ positions, total
   };
 
   const tabs = (
-    <div role="tablist" aria-label="Weergave" className="inline-flex p-0.5 rounded-lg bg-[rgb(var(--surface-sunken))] border border-[rgb(var(--border))] max-w-full overflow-x-auto">
+    <div role="tablist" aria-label="Weergave" className="no-print inline-flex p-0.5 rounded-lg bg-[rgb(var(--surface-sunken))] border border-[rgb(var(--border))] max-w-full overflow-x-auto">
       {VIEWS.map((v) => (
         <button
           key={v.id}
@@ -74,10 +74,10 @@ export const PortfolioViews: React.FC<PortfolioViewsProps> = ({ positions, total
   return (
     <Card title="Mijn portefeuille" subtitle={current.subtitle}>
       <div className="mb-5">{tabs}</div>
-      {view === 'cirkel' && <DonutChart positions={positions} totals={totals} showInvested={showInvested} onSelect={onSelectStock} />}
+      {view === 'cirkel' && <DonutChart positions={positions} colors={colors} totals={totals} showInvested={showInvested} onSelect={onSelectStock} />}
       {view === 'rendement' && <ReturnBars positions={positions} onSelect={onSelectStock} />}
       {view === 'blokken' && <Treemap positions={positions} onSelect={onSelectStock} />}
-      {view === 'verloop' && <PortfolioChart series={series} stocks={stocks} onSelectStock={onSelectStock} />}
+      {view === 'verloop' && <PortfolioChart series={series} />}
     </Card>
   );
 };

@@ -15,7 +15,7 @@ import crypto from 'crypto';
 // compileert elk bestand onder /api los, relatieve imports bestaan op de
 // server niet. Houd de auth-constanten gelijk aan de andere /api-bestanden.
 
-const CACHE_KEY = 'quotes:v3';
+const CACHE_KEY = 'quotes:v4';
 const CACHE_TTL_SECONDS = 300; // 5 minuten
 const REQUEST_TIMEOUT_MS = 3500;
 
@@ -71,6 +71,8 @@ interface Quote {
   range52?: { low: number; high: number } | null;
   /** Naam van de beurs, indien bekend */
   exchange?: string | null;
+  /** Uitkeringen (dividend) van de afgelopen 12 maanden, per aandeel in euro's, indien bekend */
+  dividends?: { date: string; amount: number }[];
 }
 
 interface QuotesResponse {
@@ -293,6 +295,25 @@ async function yahooChart(symbol: string): Promise<{
   };
 }
 
+/** Dividenden van het afgelopen jaar (bijzaak: mislukt dit, dan tonen we gewoon geen dividend). */
+async function yahooDividends(symbol: string): Promise<{ currency: string; items: { date: string; amount: number }[] }> {
+  const data = await yahooJson(`/v8/finance/chart/${encodeURIComponent(symbol)}?range=1y&interval=1mo&events=div`);
+  const result = data?.chart?.result?.[0];
+  const currency = result?.meta?.currency;
+  const divs = result?.events?.dividends;
+  if (typeof currency !== 'string' || !divs || typeof divs !== 'object') return { currency: 'EUR', items: [] };
+  const items: { date: string; amount: number }[] = [];
+  for (const d of Object.values(divs) as any[]) {
+    const amount = num(d?.amount);
+    const ts = num(d?.date);
+    if (amount !== null && amount > 0 && ts !== null) {
+      items.push({ date: new Date(ts * 1000).toISOString().slice(0, 10), amount });
+    }
+  }
+  items.sort((a, b) => a.date.localeCompare(b.date));
+  return { currency, items };
+}
+
 async function yahooQuote(stock: StoredStock, db: Db): Promise<RawQuote> {
   let symbol = stock.symbol;
   let matchedBy: 'isin' | 'map' | 'saved' = 'saved';
@@ -395,6 +416,24 @@ async function quoteForStock(
     }
   }
 
+  // Dividend van het afgelopen jaar via Yahoo (ook als de koers van Twelve Data kwam).
+  let dividends: Quote['dividends'];
+  try {
+    let ySymbol: string | null | undefined = source === 'yahoo' ? raw.symbol : stock.symbol;
+    if (!ySymbol && stock.isin) ySymbol = await yahooResolveIsin(stock.isin);
+    if (ySymbol) {
+      const d = await yahooDividends(ySymbol);
+      const out: { date: string; amount: number }[] = [];
+      for (const item of d.items) {
+        const eurAmount = await toEuro(item.amount, d.currency, fxCache, takeCredit);
+        out.push({ date: item.date, amount: Math.round(eurAmount * 10000) / 10000 });
+      }
+      dividends = out;
+    }
+  } catch {
+    dividends = undefined; // bijzaak
+  }
+
   return {
     price,
     symbol: raw.symbol,
@@ -406,6 +445,7 @@ async function quoteForStock(
     changePct: raw.changePct ?? null,
     range52,
     exchange: raw.exchange ?? null,
+    ...(dividends ? { dividends } : {}),
   };
 }
 

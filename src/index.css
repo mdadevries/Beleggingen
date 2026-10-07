@@ -23,6 +23,8 @@
     --series-3: 27 175 122; /* aqua */
     --series-4: 237 161 0; /* geel */
     --series-5: 232 123 164; /* magenta */
+    --series-other: 168 167 158; /* grijs: alles buiten de top 5 */
+    --tile-good: 21 128 61; /* donkergroen: blok met winst */
 
     /* Tekst-/linkkleur voor accenten: iets donkerder/lichter per modus zodat
        kleine tekst AA haalt. De grafiekkleuren (series-*) blijven in beide
@@ -57,6 +59,7 @@
     --banner-border: 110 84 24;
     --banner-text: 252 211 77;
     --chart-ring: 26 26 29;
+    --series-other: 104 104 112;
 
     color-scheme: dark;
   }
@@ -106,4 +109,14 @@
   transform-box: fill-box;
   transform-origin: left center;
   animation: reveal-x 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Afdrukken / opslaan als pdf: alleen de inhoud, zonder knoppen en beweging. */
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff !important; }
+  section { break-inside: avoid; box-shadow: none !important; }
+  .reveal-rect { animation: none !important; }
+  main { max-width: none !important; padding: 0 !important; }
+  @page { margin: 12mm; }
 }

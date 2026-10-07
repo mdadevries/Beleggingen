@@ -2,7 +2,7 @@ import React from 'react';
 import { ArrowLeft, Info } from 'lucide-react';
 import { MarketInfo, StockPosition, Transaction } from '../data/types.ts';
 import { findProfile } from '../data/stockProfiles.ts';
-import { seriesColor } from '../utils/colors.ts';
+import { OTHER_COLOR } from '../utils/colors.ts';
 import { formatDate, formatEuro, formatEuroPrecise, formatPercent, formatPercentPlain } from '../utils/portfolio.ts';
 import { Private } from '../hooks/usePrivacy.tsx';
 import { Card } from './Card.tsx';
@@ -13,6 +13,7 @@ interface StockDetailProps {
   position: StockPosition;
   transactions: Transaction[];
   market: MarketInfo | undefined;
+  color?: string;
   onBack: () => void;
 }
 
@@ -46,20 +47,25 @@ const RangeBar: React.FC<{ low: number; high: number; price: number }> = ({ low,
 };
 
 /** Het overzicht van één aandeel: wat het is, hoe het ervoor staat en wat jij ermee deed. */
-export const StockDetail: React.FC<StockDetailProps> = ({ position: p, transactions, market, onBack }) => {
+export const StockDetail: React.FC<StockDetailProps> = ({ position: p, transactions, market, color: stockColor, onBack }) => {
   const { stock } = p;
   const profile = findProfile(stock);
   const txs = transactions.filter((t) => t.ticker === stock.ticker).sort((a, b) => b.date.localeCompare(a.date));
   const held = p.sharesHeld > 0;
   const live = market?.live === true;
-  const color = seriesColor(stock.colorSlot);
+  const color = stockColor ?? OTHER_COLOR;
+  const divs = market?.dividends;
+  const dividend =
+    live && divs && divs.length > 0
+      ? { perShare: divs.reduce((s, d) => s + d.amount, 0), count: divs.length, last: divs[divs.length - 1].date }
+      : null;
 
   return (
     <div className="space-y-5">
       <button
         type="button"
         onClick={onBack}
-        className="inline-flex items-center gap-1.5 -ml-1 px-2 py-1.5 rounded-lg text-sm font-medium text-[rgb(var(--text-secondary))] hover:bg-[rgb(var(--surface-sunken))]"
+        className="no-print inline-flex items-center gap-1.5 -ml-1 px-2 py-1.5 rounded-lg text-sm font-medium text-[rgb(var(--text-secondary))] hover:bg-[rgb(var(--surface-sunken))]"
       >
         <ArrowLeft className="w-4 h-4" aria-hidden="true" />
         Terug naar overzicht
@@ -92,8 +98,8 @@ export const StockDetail: React.FC<StockDetailProps> = ({ position: p, transacti
         </p>
       )}
 
-      <div className="grid lg:grid-cols-5 gap-5 items-start">
-        <div className="lg:col-span-3 space-y-5">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 items-start">
+        <div className="lg:col-span-3 min-w-0 space-y-5">
           <Card title="Jouw koersmomenten" subtitle="De koers op de dagen dat je kocht of verkocht, en de koers van nu">
             <PriceChart stock={stock} transactions={transactions} avgBuyPrice={held ? p.avgBuyPrice : 0} />
           </Card>
@@ -120,7 +126,7 @@ export const StockDetail: React.FC<StockDetailProps> = ({ position: p, transacti
           </Card>
         </div>
 
-        <div className="lg:col-span-2 space-y-5">
+        <div className="lg:col-span-2 min-w-0 space-y-5">
           <Card title="Jouw positie">
             <dl>
               <Fact label="Aantal">
@@ -155,21 +161,35 @@ export const StockDetail: React.FC<StockDetailProps> = ({ position: p, transacti
             </Card>
           )}
 
-          <Card title={`Over ${stock.name}`}>
-            {profile ? (
-              <p className="text-sm leading-relaxed text-[rgb(var(--text-secondary))] mb-3 max-w-prose">{profile.about}</p>
-            ) : (
-              <p className="text-sm text-[rgb(var(--text-muted))] mb-3">Voor dit aandeel is nog geen uitleg toegevoegd.</p>
-            )}
-            <dl>
-              {profile && <Fact label="Soort">{profile.kind}</Fact>}
-              {profile?.sector && <Fact label="Sector">{profile.sector}</Fact>}
-              {profile?.country && <Fact label="Land">{profile.country}</Fact>}
-              {market?.exchange && <Fact label="Beurs">{market.exchange}</Fact>}
-              {market?.currency && <Fact label="Noteert in">{market.currency === 'GBp' ? 'Britse ponden (pence)' : market.currency}</Fact>}
-              {stock.isin && <Fact label="ISIN">{stock.isin}</Fact>}
-            </dl>
-          </Card>
+          {dividend && (
+            <Card title="Dividend" subtitle="Wat dit aandeel het afgelopen jaar uitkeerde">
+              <dl>
+                <Fact label="Per aandeel">{formatEuroPrecise(dividend.perShare)}</Fact>
+                <Fact label="Aantal uitkeringen">{dividend.count}</Fact>
+                <Fact label="Laatste uitkering">{formatDate(dividend.last)}</Fact>
+                {held && (
+                  <Fact label="Verwacht voor jou">
+                    <Private>{formatEuroPrecise(dividend.perShare * p.sharesHeld)}</Private>
+                  </Fact>
+                )}
+              </dl>
+              <p className="mt-3 text-xs text-[rgb(var(--text-muted))]">Bruto en een schatting, gebaseerd op het afgelopen jaar.</p>
+            </Card>
+          )}
+
+          {(profile || market?.exchange || market?.currency || stock.isin) && (
+            <Card title={`Over ${stock.name}`}>
+              {profile && <p className="text-sm leading-relaxed text-[rgb(var(--text-secondary))] mb-3 max-w-prose">{profile.about}</p>}
+              <dl>
+                {profile && <Fact label="Soort">{profile.kind}</Fact>}
+                {profile?.sector && <Fact label="Sector">{profile.sector}</Fact>}
+                {profile?.country && <Fact label="Land">{profile.country}</Fact>}
+                {market?.exchange && <Fact label="Beurs">{market.exchange}</Fact>}
+                {market?.currency && <Fact label="Noteert in">{market.currency === 'GBp' ? 'Britse ponden (pence)' : market.currency}</Fact>}
+                {stock.isin && <Fact label="ISIN">{stock.isin}</Fact>}
+              </dl>
+            </Card>
+          )}
         </div>
       </div>
     </div>

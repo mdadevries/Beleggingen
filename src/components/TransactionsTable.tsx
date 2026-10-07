@@ -14,6 +14,7 @@ interface TransactionsTableProps {
 export const TransactionsTable: React.FC<TransactionsTableProps> = ({ transactions, stocks, onSelectStock }) => {
   const [tickerFilter, setTickerFilter] = useState<string>('alle');
   const [query, setQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'alle' | 'Kopen' | 'Verkopen'>('alle');
   const [sortAsc, setSortAsc] = useState(false); // standaard: nieuwste eerst
 
   const stockByTicker = useMemo(() => new Map(stocks.map((s) => [s.ticker, s])), [stocks]);
@@ -22,13 +23,17 @@ export const TransactionsTable: React.FC<TransactionsTableProps> = ({ transactio
     const q = query.trim().toLowerCase();
     return transactions
       .filter((tx) => tickerFilter === 'alle' || tx.ticker === tickerFilter)
+      .filter((tx) => typeFilter === 'alle' || tx.type === typeFilter)
       .filter((tx) => {
         if (!q) return true;
         const stockName = stockByTicker.get(tx.ticker)?.name?.toLowerCase() ?? '';
         return tx.ticker.toLowerCase().includes(q) || stockName.includes(q);
       })
       .sort((a, b) => (sortAsc ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date)));
-  }, [transactions, tickerFilter, query, sortAsc, stockByTicker]);
+  }, [transactions, tickerFilter, typeFilter, query, sortAsc, stockByTicker]);
+
+  const bought = filtered.filter((t) => t.type === 'Kopen').reduce((sum, t) => sum + t.quantity * t.price, 0);
+  const sold = filtered.filter((t) => t.type === 'Verkopen').reduce((sum, t) => sum + t.quantity * t.price, 0);
 
   return (
     <div>
@@ -61,7 +66,23 @@ export const TransactionsTable: React.FC<TransactionsTableProps> = ({ transactio
             </option>
           ))}
         </select>
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value as 'alle' | 'Kopen' | 'Verkopen')}
+          aria-label="Filter op soort transactie"
+          className="px-3 py-2.5 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] text-sm text-[rgb(var(--text-primary))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--series-1))]/40"
+        >
+          <option value="alle">Kopen en verkopen</option>
+          <option value="Kopen">Alleen kopen</option>
+          <option value="Verkopen">Alleen verkopen</option>
+        </select>
       </div>
+
+      <p className="mb-3 text-xs text-[rgb(var(--text-muted))] tabular">
+        {filtered.length} {filtered.length === 1 ? 'transactie' : 'transacties'}
+        {' · '}gekocht <Private>{formatEuroPrecise(bought)}</Private>
+        {' · '}verkocht <Private>{formatEuroPrecise(sold)}</Private>
+      </p>
 
       {/* Tabel — horizontaal scrollbaar op smalle schermen */}
       <div className="overflow-x-auto -mx-4 sm:mx-0">

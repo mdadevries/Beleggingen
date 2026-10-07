@@ -47,10 +47,32 @@ export const DEMO_QUOTES: QuoteInfo[] = [
 
 // Marktgegevens voor de demo-detailpagina's (verzonnen voorbeeldwaarden).
 export const DEMO_MARKET: Record<string, MarketInfo> = {
-  ASML: { live: true, changePct: 0.0124, range52: { low: 590, high: 835 }, exchange: 'Euronext Amsterdam', currency: 'EUR' },
-  SHELL: { live: true, changePct: -0.0061, range52: { low: 26.1, high: 33.4 }, exchange: 'Londen (LSE)', currency: 'GBp' },
-  ING: { live: true, changePct: 0.0042, range52: { low: 13.8, high: 17.9 }, exchange: 'Euronext Amsterdam', currency: 'EUR' },
-  ADYEN: { live: true, changePct: 0.0215, range52: { low: 1210, high: 1710 }, exchange: 'Euronext Amsterdam', currency: 'EUR' },
+  ASML: {
+    live: true, changePct: 0.0124, range52: { low: 590, high: 835 }, exchange: 'Euronext Amsterdam', currency: 'EUR',
+    dividends: [
+      { date: '2025-10-29', amount: 1.52 },
+      { date: '2026-02-04', amount: 1.52 },
+      { date: '2026-04-29', amount: 1.7 },
+      { date: '2026-07-29', amount: 1.7 },
+    ],
+  },
+  SHELL: {
+    live: true, changePct: -0.0061, range52: { low: 26.1, high: 33.4 }, exchange: 'Londen (LSE)', currency: 'GBp',
+    dividends: [
+      { date: '2025-11-13', amount: 0.31 },
+      { date: '2026-02-26', amount: 0.31 },
+      { date: '2026-05-14', amount: 0.32 },
+      { date: '2026-08-13', amount: 0.32 },
+    ],
+  },
+  ING: {
+    live: true, changePct: 0.0042, range52: { low: 13.8, high: 17.9 }, exchange: 'Euronext Amsterdam', currency: 'EUR',
+    dividends: [
+      { date: '2026-04-28', amount: 0.74 },
+      { date: '2026-08-03', amount: 0.37 },
+    ],
+  },
+  ADYEN: { live: true, changePct: 0.0215, range52: { low: 1210, high: 1710 }, exchange: 'Euronext Amsterdam', currency: 'EUR', dividends: [] },
   PROSUS: { live: false, exchange: 'Euronext Amsterdam', currency: 'EUR' },
 };
 

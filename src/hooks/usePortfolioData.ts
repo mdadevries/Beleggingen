@@ -35,6 +35,7 @@ interface ApiQuote {
   changePct?: number | null;
   range52?: { low: number; high: number } | null;
   exchange?: string | null;
+  dividends?: { date: string; amount: number }[];
 }
 
 /**
@@ -152,6 +153,7 @@ export function usePortfolioData(): PortfolioData {
                   exchange: q.exchange ?? null,
                   currency: q.currency ?? null,
                   asOf: q.asOf,
+                  dividends: q.dividends ?? null,
                 }
               : { live: false };
           }
