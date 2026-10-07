@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-export type Page = 'overzicht' | 'transacties' | 'koersen';
+export type Page = 'overzicht' | 'transacties' | 'studieschuld' | 'koersen';
 export interface Route {
   page: Page;
   /** Gevuld op de detailpagina van een aandeel */
@@ -11,6 +11,7 @@ function parse(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   if (parts[0] === 'aandeel' && parts[1]) return { page: 'overzicht', ticker: decodeURIComponent(parts[1]) };
   if (parts[0] === 'transacties') return { page: 'transacties', ticker: null };
+  if (parts[0] === 'studieschuld') return { page: 'studieschuld', ticker: null };
   if (parts[0] === 'koersen') return { page: 'koersen', ticker: null };
   return { page: 'overzicht', ticker: null };
 }

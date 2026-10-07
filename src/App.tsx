@@ -18,6 +18,7 @@ import { DividendCard } from './components/DividendCard.tsx';
 import { EtfSplitCard } from './components/EtfSplitCard.tsx';
 import { ExportBar } from './components/ExportBar.tsx';
 import { exportPositionsCsv, exportTransactionsCsv } from './utils/exportData.ts';
+import { StudyLoanPage } from './components/StudyLoanPage.tsx';
 
 export default function App() {
   const { route, goPage, goStock } = useHashRoute();
@@ -87,6 +88,8 @@ export default function App() {
               <QuoteSourcesTable stocks={stocks} quotes={DEMO_QUOTES} />
             </Card>
           </>
+        ) : page === 'studieschuld' ? (
+          <StudyLoanPage isDemo={isDemo} totals={totals} showInvested={showInvested} />
         ) : page === 'overzicht' ? (
           <>
             <KpiRow totals={totals} positions={positions} showInvested={showInvested} today={today} onSelectStock={goStock} />
