@@ -105,6 +105,42 @@ hoe je 'm zelf controleert.
    execution-log of de HTTP Request een 200 teruggeeft.
 5. Zet de workflow op **Active** zodra het een paar keer goed is gegaan.
 
+## Weekrapport met AI (n8n + Claude)
+
+Elke zondagavond schrijft een tweede n8n-workflow (`n8n/beleggingen-weekrapport.json`) een korte
+terugblik op je portefeuille. Die staat als mail in je inbox en als tab **Weekrapport** op de site.
+
+**Hoe het werkt**
+
+1. n8n vraagt `/api/reports?snapshot=1` om je posities, koersen, koershistorie en nieuws (Finnhub, alleen
+   Amerikaanse aandelen). Daarvoor gebruikt n8n dezelfde sleutel als bij de DEGIRO-import (`N8N_API_SECRET`).
+2. Voor elk aandeel dat je hebt wordt eerst de koershistorie ververst (`/api/quotes?history=TICKER`), zodat
+   "een week geleden" bekend is. Is die er niet, dan gebruikt n8n de koersen uit het vorige rapport.
+3. Een Code-node rekent alle cijfers uit: weekverandering, spreiding, ETF-aandeel, valuta, verwachte uitkeringen.
+   **De AI rekent niets zelf.** Hij krijgt alleen percentages (geen bedragen of aantallen stuks) en schrijft de uitleg.
+4. Claude (via de Anthropic API) levert een JSON-rapport. Dat wordt gecontroleerd, opgeslagen via `POST /api/reports`
+   (tabel `weekly_reports`, dezelfde week opnieuw draaien overschrijft) en gemaild.
+5. Gaat er iets mis, dan krijg je een mail "weekrapport is mislukt".
+
+De AI geeft bewust geen koop-/verkoopadvies en geen voorspellingen. Mist er data (bijvoorbeeld een weekvergelijking
+voor een aandeel), dan zegt het rapport dat. Is minder dan 70% van je portefeuille vergelijkbaar, dan toont de site
+geen weekpercentage voor het geheel.
+
+**Instellen**
+
+1. Supabase: plak `supabase/weekly_reports.sql` in de SQL Editor en run.
+2. Vercel: deploy de nieuwe code. Er zijn geen nieuwe environment variables nodig (`N8N_API_SECRET`,
+   `FINNHUB_API_KEY` en de Supabase-variabelen staan er al).
+3. n8n: importeer `n8n/beleggingen-weekrapport.json` en koppel:
+   - **Gmail account** (OAuth2) op "Mail versturen" en "Melding bij fout";
+   - **DEGIRO webhook key** (Header Auth, `x-api-key`) op de HTTP-nodes naar je site, dezelfde als bij de import;
+   - **Anthropic API key** (Header Auth, naam `x-api-key`, waarde = je sleutel van console.anthropic.com) op "Claude schrijft rapport".
+4. Zet in de node **Instellingen** je echte `siteUrl` (en eventueel `mailTo`).
+5. Klik **Execute workflow** (via "Nu testen") en kijk of het rapport op de site verschijnt. Zet de workflow daarna op **Active**.
+
+Het model staat bovenaan in de Code-node "Rapportdata maken" (`MODEL`). Een rapport kost ongeveer een paar cent.
+n8n draait lokaal: de workflow loopt alleen als je Mac aan staat en n8n open is.
+
 ## Backend (Vercel) — wat je zelf moet instellen
 
 Database: **Supabase** (Postgres). Maak een project op supabase.com, plak

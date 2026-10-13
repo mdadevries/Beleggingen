@@ -695,6 +695,12 @@ async function loadCredits(db: Db, now: number) {
   };
 }
 
+function isN8nRequest(req: VercelRequest): boolean {
+  const secret = process.env.N8N_API_SECRET;
+  const header = req.headers['x-api-key'];
+  return !!secret && typeof header === 'string' && timingSafeEqual(header, secret);
+}
+
 function isCronRequest(req: VercelRequest): boolean {
   const secret = process.env.CRON_SECRET;
   const header = req.headers.authorization;
@@ -956,9 +962,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(405).json({ error: 'Methode niet toegestaan.' });
     return;
   }
-  // Twee manieren binnen: de wachtwoord-sessie (jij) of de dagelijkse update van Vercel (CRON_SECRET).
+  // Drie manieren binnen: de wachtwoord-sessie (jij), de dagelijkse update van Vercel (CRON_SECRET),
+  // of n8n (x-api-key) - die laatste alleen om de koershistorie voor het weekrapport te vullen.
   const isCron = isCronRequest(req);
-  if (!isCron && !isRealSession(req)) {
+  const isN8n = isN8nRequest(req);
+  if (!isCron && !isN8n && !isRealSession(req)) {
     res.status(401).json({ error: 'Niet ingelogd.' });
     return;
   }
@@ -983,6 +991,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (h) return await handleHistory(h, db, res);
       const f = tickerParam(q('fundamentals'));
       if (f) return await handleFundamentals(f, db, res);
+      if (isN8n) {
+        // n8n mag alleen historie/kerncijfers vullen, nooit de hele koersronde starten.
+        res.status(400).json({ error: 'Geef ?history=TICKER of ?fundamentals=TICKER mee.' });
+        return;
+      }
     }
 
     const allStockRows = await db('/stocks?select=*');

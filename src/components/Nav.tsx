@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, ArrowLeftRight, Activity, Info, LogOut, Sun, Moon, Eye, EyeOff, LineChart, GraduationCap } from 'lucide-react';
+import { LayoutDashboard, ArrowLeftRight, Activity, Info, LogOut, Sun, Moon, Eye, EyeOff, LineChart, GraduationCap, FileText } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme.ts';
 import { usePrivacy } from '../hooks/usePrivacy.tsx';
 import { Page } from '../hooks/useHashRoute.ts';
@@ -15,7 +15,7 @@ interface NavProps {
 }
 
 const iconBtn =
-  'inline-flex items-center justify-center gap-1.5 min-w-[44px] sm:min-w-0 px-2.5 py-2 rounded-lg text-xs font-medium transition-colors';
+  'inline-flex items-center justify-center gap-1.5 min-w-[36px] sm:min-w-0 px-1.5 sm:px-2.5 py-2 rounded-lg text-xs font-medium transition-colors';
 
 export const Nav: React.FC<NavProps> = ({ page, onNavigate, isDemo, demoReason }) => {
   const { dark, toggle: toggleTheme } = useTheme();
@@ -24,6 +24,7 @@ export const Nav: React.FC<NavProps> = ({ page, onNavigate, isDemo, demoReason }
   const items: { id: Page; label: string; icon: React.ReactNode }[] = [
     { id: 'overzicht', label: 'Overzicht', icon: <LayoutDashboard className="w-4 h-4" aria-hidden="true" /> },
     { id: 'transacties', label: 'Transacties', icon: <ArrowLeftRight className="w-4 h-4" aria-hidden="true" /> },
+    { id: 'weekrapport', label: 'Weekrapport', icon: <FileText className="w-4 h-4" aria-hidden="true" /> },
     { id: 'studieschuld', label: 'Studieschuld', icon: <GraduationCap className="w-4 h-4" aria-hidden="true" /> },
     // Alleen in de demo-versie.
     ...(isDemo ? [{ id: 'koersen' as Page, label: 'Koersen', icon: <Activity className="w-4 h-4" aria-hidden="true" /> }] : []),
@@ -31,7 +32,7 @@ export const Nav: React.FC<NavProps> = ({ page, onNavigate, isDemo, demoReason }
 
   return (
     <header className="no-print sticky top-0 z-20 bg-[rgb(var(--surface))]/90 backdrop-blur-md border-b border-[rgb(var(--border))]">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
+      <div className="max-w-5xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-1.5 sm:gap-3">
         <button
           type="button"
           onClick={() => onNavigate('overzicht')}

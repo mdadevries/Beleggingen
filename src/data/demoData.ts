@@ -1,4 +1,4 @@
-import { MarketInfo, QuoteInfo, Stock, Transaction } from './types.ts';
+import { MarketInfo, QuoteInfo, Stock, Transaction, WeeklyReport } from './types.ts';
 
 // Demodata — geen koppeling met een echte broker of bankrekening (zie
 // privacy-overweging: voor de eerste versie tonen we alleen voorbeelddata).
@@ -111,4 +111,58 @@ export const DEMO_TRANSACTIONS: Transaction[] = [
   { id: 't11', date: '2026-08-03', ticker: 'ING', type: 'Verkopen', quantity: 20, price: 17.1 },
   { id: 't12', date: '2026-08-20', ticker: 'ADYEN', type: 'Kopen', quantity: 1, price: 1580 },
   { id: 't13', date: '2026-09-05', ticker: 'PROSUS', type: 'Kopen', quantity: 10, price: 37.4 },
+];
+
+// Voorbeeld-weekrapport voor de demo (verzonnen cijfers en tekst). Een demo-sessie roept
+// /api/reports nooit aan, dus hier komt nooit echte data in.
+export const DEMO_REPORTS: WeeklyReport[] = [
+  {
+    weekStart: '2026-10-05',
+    weekEnd: '2026-10-11',
+    createdAt: '2026-10-11T17:05:00Z',
+    model: 'voorbeeld',
+    stats: {
+      asOf: '2026-10-11T17:00:00Z',
+      periodStart: '2026-10-04',
+      periodEnd: '2026-10-11',
+      totalValue: 11180,
+      invested: 10240,
+      returnPct: 0.0918,
+      weekChangePct: 0.0142,
+      weekChangeAmount: 157,
+      coverage: 1,
+      etfShare: 0.42,
+      top1: { ticker: 'VANGUA', share: 0.42 },
+      top3Share: 0.78,
+      currency: [
+        { currency: 'EUR', share: 0.86 },
+        { currency: 'GBP', share: 0.14 },
+      ],
+      expectedDividendYear: 214,
+      soldThisWeek: [],
+      positions: [
+        { ticker: 'VANGUA', name: 'Vanguard FTSE All-World UCITS ETF', isEtf: true, value: 4696, allocation: 0.42, price: 167.14, weekChangePct: 0.0108, weekChangeAmount: 50, totalReturnPct: 0.112, newThisWeek: false },
+        { ticker: 'ASML', name: 'ASML Holding', isEtf: false, value: 2340, allocation: 0.209, price: 780, weekChangePct: 0.0312, weekChangeAmount: 71, totalReturnPct: 0.164, newThisWeek: false },
+        { ticker: 'SHELL', name: 'Shell plc', isEtf: false, value: 1575, allocation: 0.141, price: 31.5, weekChangePct: -0.0094, weekChangeAmount: -15, totalReturnPct: 0.031, newThisWeek: false },
+        { ticker: 'ING', name: 'ING Groep', isEtf: false, value: 1344, allocation: 0.12, price: 16.8, weekChangePct: 0.0121, weekChangeAmount: 16, totalReturnPct: 0.082, newThisWeek: false },
+        { ticker: 'ADYEN', name: 'Adyen', isEtf: false, value: 825, allocation: 0.074, price: 1650, weekChangePct: 0.0268, weekChangeAmount: 21, totalReturnPct: 0.054, newThisWeek: false },
+        { ticker: 'PROSUS', name: 'Prosus', isEtf: false, value: 400, allocation: 0.036, price: 37.4, weekChangePct: null, weekChangeAmount: null, totalReturnPct: -0.012, newThisWeek: false },
+      ],
+    },
+    content: {
+      headline: 'Rustige groene week, ASML trok de portefeuille omhoog',
+      summary:
+        'Je portefeuille steeg deze week met 1,4%. ASML deed het met +3,1% het best, gevolgd door Adyen (+2,7%). Shell was de enige positie die daalde (-0,9%). De ETF liep mee met de markt en steeg 1,1%.',
+      movers: [
+        { ticker: 'ASML', comment: 'Steeg 3,1% en is nu je grootste losse aandeel, ruim 20% van de portefeuille.' },
+        { ticker: 'ADYEN', comment: 'Plus 2,7%, een kleinere positie die toch merkbaar bijdroeg.' },
+        { ticker: 'SHELL', comment: 'Min 0,9%, de enige daler van de week.' },
+      ],
+      concentration:
+        'Je grootste positie is de ETF met 42%; de top 3 is samen 78%. Ongeveer 14% van je geld noteert in ponden, de rest in euro.',
+      split: 'ETF\'s vormen 42% van je portefeuille, losse aandelen 58%. Het ETF-deel bewoog rustiger dan de losse aandelen.',
+      upcoming: 'Er is voor de komende 45 dagen geen uitkering bekend. Uitkeringen zijn altijd een schatting op basis van vorig jaar.',
+      dataNote: 'Voor Prosus is geen vergelijking met vorige week mogelijk, die koers is nog de laatste transactieprijs.',
+    },
+  },
 ];

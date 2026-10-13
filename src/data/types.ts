@@ -87,3 +87,60 @@ export interface SeriesPoint {
   /** Ingelegd bedrag (kostenbasis) op dat moment */
   cost: number;
 }
+
+/** Eén positie in een weekrapport (cijfers uitgerekend door n8n, niet door de AI). */
+export interface ReportPosition {
+  ticker: string;
+  name: string;
+  isEtf: boolean;
+  value: number;
+  /** Aandeel van de portefeuille, 0-1 */
+  allocation: number;
+  price: number;
+  /** Verandering over de week als fractie; null = geen vergelijkpunt bekend */
+  weekChangePct: number | null;
+  weekChangeAmount: number | null;
+  totalReturnPct: number | null;
+  newThisWeek: boolean;
+}
+
+export interface ReportStats {
+  asOf: string;
+  periodStart: string;
+  periodEnd: string;
+  totalValue: number;
+  invested: number | null;
+  returnPct: number | null;
+  /** Null als te weinig posities een vergelijkpunt hadden */
+  weekChangePct: number | null;
+  weekChangeAmount: number | null;
+  /** Welk deel van de portefeuille een weekvergelijking had, 0-1 */
+  coverage: number;
+  etfShare: number;
+  top1: { ticker: string; share: number } | null;
+  top3Share: number;
+  currency: { currency: string; share: number }[];
+  expectedDividendYear: number;
+  soldThisWeek: string[];
+  positions: ReportPosition[];
+}
+
+/** De tekst van de AI. Bevat bewust geen bedragen, zodat de anonieme modus klopt. */
+export interface ReportContent {
+  headline: string;
+  summary: string;
+  movers: { ticker: string; comment: string }[];
+  concentration: string;
+  split: string;
+  upcoming: string;
+  dataNote: string;
+}
+
+export interface WeeklyReport {
+  weekStart: string; // maandag, ISO yyyy-mm-dd
+  weekEnd: string; // zondag
+  createdAt: string;
+  model: string | null;
+  stats: ReportStats;
+  content: ReportContent;
+}

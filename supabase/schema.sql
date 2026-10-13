@@ -34,3 +34,15 @@ alter table public.quote_cache  enable row level security;
 -- werkt als "Automatically expose new tables" uit staat. anon/authenticated krijgen niets.
 grant usage on schema public to service_role;
 grant all on public.stocks, public.transactions, public.quote_cache to service_role;
+
+-- Weekrapport (AI-analyse in n8n). Los te draaien via supabase/weekly_reports.sql.
+create table if not exists public.weekly_reports (
+  week_start date primary key,
+  week_end   date not null,
+  created_at timestamptz not null default now(),
+  model      text,
+  stats      jsonb not null,
+  content    jsonb not null
+);
+alter table public.weekly_reports enable row level security;
+grant all on public.weekly_reports to service_role;
