@@ -24,8 +24,8 @@ const ISIN_RE = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;
 // Bewust zelfstandig (geen import uit een ander bestand): Vercel compileert elk
 // bestand onder /api los, relatieve imports bestaan op de server niet.
 // Houd deze constanten gelijk aan middleware.ts en de andere /api-bestanden.
-const AUTH_COOKIE = 'beleggingen_auth';
-const TOKEN_MESSAGE = 'auth:v1';
+const AUTH_COOKIE = '__Host-beleggingen_session';
+const SESSION_PREFIX = 'v2';
 
 function parseCookie(header: string | undefined, name: string): string | null {
   if (!header) return null;
@@ -36,13 +36,25 @@ function parseCookie(header: string | undefined, name: string): string | null {
   return null;
 }
 
+/** Controleert handtekening en einddatum van het sessietoken. */
+function readSession(secret: string, token: string | null): 'real' | 'demo' | null {
+  if (!token) return null;
+  const parts = token.split('.');
+  if (parts.length !== 5 || parts[0] !== SESSION_PREFIX) return null;
+  const [prefix, role, exp, nonce, sig] = parts;
+  if (role !== 'real' && role !== 'demo') return null;
+  if (!/^\d{1,12}$/.test(exp)) return null;
+  const expected = crypto.createHmac('sha256', secret).update(`${prefix}.${role}.${exp}.${nonce}`).digest('hex');
+  if (!timingSafeEqual(sig, expected)) return null;
+  if (Number(exp) < Date.now() / 1000) return null;
+  return role;
+}
+
 /** Alleen de echte (wachtwoord-)sessie mag portefeuilledata lezen; demo en anoniem niet. */
 function isRealSession(req: VercelRequest): boolean {
   const secret = process.env.SESSION_SECRET;
-  const token = parseCookie(req.headers.cookie, AUTH_COOKIE);
-  if (!secret || !token) return false;
-  const expected = crypto.createHmac('sha256', secret).update(TOKEN_MESSAGE).digest('hex');
-  return timingSafeEqual(token, expected);
+  if (!secret) return false;
+  return readSession(secret, parseCookie(req.headers.cookie, AUTH_COOKIE)) === 'real';
 }
 
 interface StoredTransaction {

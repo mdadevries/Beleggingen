@@ -28,9 +28,20 @@ npm run dev
   vertraagd, zonder garantie. Lukt het niet, dan valt de site per aandeel terug
   op de laatste transactieprijs en zegt dat ook (regel onder de kerncijfers).
   Koersen zijn alleen voor eigen overzicht, geen handelsadvies.
-- **Login**: de hele site zit achter één wachtwoord (Vercel Edge Middleware),
-  want er staat straks eigen financiële data in. `/api/*` loopt er niet
-  doorheen — die heeft eigen auth.
+- **Login**: de hele site zit achter een login met gebruikersnaam + wachtwoord
+  (Vercel Edge Middleware), want er staat eigen financiële data in. `/api/*`
+  loopt er niet doorheen — die heeft eigen auth. Veiligheid: de fout is altijd
+  "onjuiste gebruikersnaam of wachtwoord" (je ziet niet welke van de twee klopt);
+  na 5 foute pogingen in 15 minuten gaat dat IP-adres op slot (15 min, daarna
+  steeds langer tot 24 uur; teller in Supabase `quote_cache`); de sessie is een
+  getekend token dat na 7 dagen verloopt (`SESSION_DAYS` in de `/api`-bestanden en
+  `middleware.ts`), in een `__Host-`-cookie (HttpOnly, Secure); het wachtwoord
+  kan als scrypt-hash staan (zie hieronder); de loginpagina heeft een strikte
+  Content-Security-Policy en `vercel.json` zet security-headers.
+- **Anonieme modus bij het inloggen**: op de loginpagina staat een vinkje
+  "Anonieme modus". Aan = na het inloggen zijn aantallen en bedragen meteen
+  verborgen (zelfde schakelaar als de knop "Anoniem" in de header; de keuze staat
+  in `localStorage` onder `beleggingen_privacy`). Het vinkje onthoudt je vorige keuze.
 - **Demo-account**: op de inlogpagina staat ook "Doorgaan met demo-account" —
   geen wachtwoord nodig, logt in met een aparte (server-side afgeleide)
   sessie die **altijd** demodata toont. Zo kun je de site aan iemand laten
@@ -105,7 +116,7 @@ hoe je 'm zelf controleert.
    execution-log of de HTTP Request een 200 teruggeeft.
 5. Zet de workflow op **Active** zodra het een paar keer goed is gegaan.
 
-## Weekrapport met AI (n8n + Claude)
+## Weekrapport met AI (n8n + Gemini)
 
 Elke zondagavond schrijft een tweede n8n-workflow (`n8n/beleggingen-weekrapport.json`) een korte
 terugblik op je portefeuille. Die staat als mail in je inbox en als tab **Weekrapport** op de site.
@@ -118,7 +129,7 @@ terugblik op je portefeuille. Die staat als mail in je inbox en als tab **Weekra
    "een week geleden" bekend is. Is die er niet, dan gebruikt n8n de koersen uit het vorige rapport.
 3. Een Code-node rekent alle cijfers uit: weekverandering, spreiding, ETF-aandeel, valuta, verwachte uitkeringen.
    **De AI rekent niets zelf.** Hij krijgt alleen percentages (geen bedragen of aantallen stuks) en schrijft de uitleg.
-4. Claude (via de Anthropic API) levert een JSON-rapport. Dat wordt gecontroleerd, opgeslagen via `POST /api/reports`
+4. Gemini (gratis laag van de Google Gemini API) levert een JSON-rapport. Dat wordt gecontroleerd, opgeslagen via `POST /api/reports`
    (tabel `weekly_reports`, dezelfde week opnieuw draaien overschrijft) en gemaild.
 5. Gaat er iets mis, dan krijg je een mail "weekrapport is mislukt".
 
@@ -134,11 +145,11 @@ geen weekpercentage voor het geheel.
 3. n8n: importeer `n8n/beleggingen-weekrapport.json` en koppel:
    - **Gmail account** (OAuth2) op "Mail versturen" en "Melding bij fout";
    - **DEGIRO webhook key** (Header Auth, `x-api-key`) op de HTTP-nodes naar je site, dezelfde als bij de import;
-   - **Anthropic API key** (Header Auth, naam `x-api-key`, waarde = je sleutel van console.anthropic.com) op "Claude schrijft rapport".
+   - **Gemini API key** (Header Auth, naam `x-goog-api-key`, waarde = je sleutel uit aistudio.google.com/apikey) op "AI schrijft rapport".
 4. Zet in de node **Instellingen** je echte `siteUrl` (en eventueel `mailTo`).
 5. Klik **Execute workflow** (via "Nu testen") en kijk of het rapport op de site verschijnt. Zet de workflow daarna op **Active**.
 
-Het model staat bovenaan in de Code-node "Rapportdata maken" (`MODEL`). Een rapport kost ongeveer een paar cent.
+Het model staat bovenaan in de Code-node "Rapportdata maken" (`MODEL`, nu `gemini-3.8-flash`). De gratis laag kost niets; Google mag in de gratis laag normaal gesproken je invoer gebruiken om producten te verbeteren, maar voor gebruikers in de EER gelden volgens de voorwaarden dezelfde dataregels als bij betaald gebruik. De AI krijgt alleen tickers en percentages te zien, geen bedragen.
 n8n draait lokaal: de workflow loopt alleen als je Mac aan staat en n8n open is.
 
 ## Backend (Vercel) — wat je zelf moet instellen
@@ -154,9 +165,14 @@ Environment Variables** (Production + Preview):
 
 | Variabele | Waarde |
 | --- | --- |
-| `SITE_PASSWORD` | een wachtwoord dat jij zelf kiest, om in te loggen |
+| `SITE_USERNAME` | de gebruikersnaam waarmee je inlogt (hoofdletters maken niet uit) |
+| `SITE_PASSWORD_HASH` | **aanbevolen**: scrypt-hash van je wachtwoord. Maak 'm met `node scripts/hash-wachtwoord.mjs` (vraagt je wachtwoord, min. 12 tekens, en print de hash) |
+| `SITE_PASSWORD` | alternatief voor de hash: het wachtwoord zelf in leesbare vorm. Alleen gebruikt als `SITE_PASSWORD_HASH` ontbreekt |
 | `SESSION_SECRET` | een lange willekeurige string (zelf genereren, bv. `openssl rand -hex 32`) |
 | `N8N_API_SECRET` | een lange willekeurige string (zelf genereren) |
+
+Alle ingelogde apparaten tegelijk uitloggen kan door `SESSION_SECRET` te wijzigen
+en opnieuw te deployen.
 
 **Zet hier nooit de echte waarden in dit bestand** — dit project staat op een
 publieke GitHub-repo, dus alles hierin is voor iedereen leesbaar. Bewaar je
@@ -187,9 +203,11 @@ src/
 api/
   transactions.ts   GET (lijst, alleen echte sessie) / POST (nieuwe order, x-api-key)
   quotes.ts         GET live koersen in euro's (alleen echte sessie)
-  login.ts          wachtwoord -> auth-cookie
+  login.ts          gebruikersnaam + wachtwoord -> sessie-cookie (met blokkade na foute pogingen)
   logout.ts         cookie wissen
-middleware.ts       Edge Middleware: wachtwoord-check voor de hele site
+scripts/
+  hash-wachtwoord.mjs   maakt de waarde voor SITE_PASSWORD_HASH
+middleware.ts       Edge Middleware: login-check + loginpagina voor de hele site
 n8n/
   beleggingen-degiro-import.json   importeerbare n8n-workflow
 ```

@@ -5,13 +5,8 @@ import crypto from 'crypto';
 // compileert elk bestand onder /api los en neemt relatieve .ts-imports niet
 // mee, waardoor de functie op de server crasht (ERR_MODULE_NOT_FOUND).
 // Houd deze constanten gelijk aan middleware.ts en de andere /api-bestanden.
-const AUTH_COOKIE = 'beleggingen_auth';
-const TOKEN_MESSAGE = 'auth:v1';
-const DEMO_TOKEN_MESSAGE = 'auth:demo:v1';
-
-function tokenFor(secret: string, message: string): string {
-  return crypto.createHmac('sha256', secret).update(message).digest('hex');
-}
+const AUTH_COOKIE = '__Host-beleggingen_session';
+const SESSION_PREFIX = 'v2';
 
 function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -20,6 +15,20 @@ function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
+
+/** Controleert handtekening en einddatum van het sessietoken. */
+function readSession(secret: string, token: string | null): 'real' | 'demo' | null {
+  if (!token) return null;
+  const parts = token.split('.');
+  if (parts.length !== 5 || parts[0] !== SESSION_PREFIX) return null;
+  const [prefix, role, exp, nonce, sig] = parts;
+  if (role !== 'real' && role !== 'demo') return null;
+  if (!/^\d{1,12}$/.test(exp)) return null;
+  const expected = crypto.createHmac('sha256', secret).update(`${prefix}.${role}.${exp}.${nonce}`).digest('hex');
+  if (!timingSafeEqual(sig, expected)) return null;
+  if (Number(exp) < Date.now() / 1000) return null;
+  return role;
+}
 
 // Vertelt de front-end welk type sessie dit is, zodat usePortfolioData() weet
 // of hij echte transacties mag ophalen (role "real") of alleen demodata mag
@@ -36,6 +45,7 @@ function parseCookie(header: string | undefined, name: string): string | null {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  res.setHeader('Cache-Control', 'private, no-store');
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     res.status(405).json({ error: 'Methode niet toegestaan.' });
@@ -43,22 +53,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const sessionSecret = process.env.SESSION_SECRET;
-  const token = parseCookie(req.headers.cookie, AUTH_COOKIE);
-
-  if (!sessionSecret || !token) {
+  if (!sessionSecret) {
     res.status(200).json({ role: 'none' });
     return;
   }
 
-  if (timingSafeEqual(token, tokenFor(sessionSecret, TOKEN_MESSAGE))) {
-    res.status(200).json({ role: 'real' });
-    return;
-  }
-
-  if (timingSafeEqual(token, tokenFor(sessionSecret, DEMO_TOKEN_MESSAGE))) {
-    res.status(200).json({ role: 'demo' });
-    return;
-  }
-
-  res.status(200).json({ role: 'none' });
+  const role = readSession(sessionSecret, parseCookie(req.headers.cookie, AUTH_COOKIE));
+  res.status(200).json({ role: role ?? 'none' });
 }

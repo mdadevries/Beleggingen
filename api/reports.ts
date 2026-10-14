@@ -12,8 +12,8 @@ import crypto from 'crypto';
 // bestand onder /api los, relatieve imports bestaan op de server niet.
 // Houd de auth-constanten gelijk aan middleware.ts en de andere /api-bestanden.
 
-const AUTH_COOKIE = 'beleggingen_auth';
-const TOKEN_MESSAGE = 'auth:v1';
+const AUTH_COOKIE = '__Host-beleggingen_session';
+const SESSION_PREFIX = 'v2';
 
 // Dezelfde sleutels als in api/quotes.ts (daar worden ze gevuld).
 const CACHE_PREFIX = 'quote:v1:';
@@ -43,13 +43,25 @@ function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
+/** Controleert handtekening en einddatum van het sessietoken. */
+function readSession(secret: string, token: string | null): 'real' | 'demo' | null {
+  if (!token) return null;
+  const parts = token.split('.');
+  if (parts.length !== 5 || parts[0] !== SESSION_PREFIX) return null;
+  const [prefix, role, exp, nonce, sig] = parts;
+  if (role !== 'real' && role !== 'demo') return null;
+  if (!/^\d{1,12}$/.test(exp)) return null;
+  const expected = crypto.createHmac('sha256', secret).update(`${prefix}.${role}.${exp}.${nonce}`).digest('hex');
+  if (!timingSafeEqual(sig, expected)) return null;
+  if (Number(exp) < Date.now() / 1000) return null;
+  return role;
+}
+
 /** Alleen de echte (wachtwoord-)sessie mag rapporten lezen; demo en anoniem niet. */
 function isRealSession(req: VercelRequest): boolean {
   const secret = process.env.SESSION_SECRET;
-  const token = parseCookie(req.headers.cookie, AUTH_COOKIE);
-  if (!secret || !token) return false;
-  const expected = crypto.createHmac('sha256', secret).update(TOKEN_MESSAGE).digest('hex');
-  return timingSafeEqual(token, expected);
+  if (!secret) return false;
+  return readSession(secret, parseCookie(req.headers.cookie, AUTH_COOKIE)) === 'real';
 }
 
 function isN8n(req: VercelRequest): boolean {
