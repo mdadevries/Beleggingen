@@ -1,6 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
 
-export type Page = 'overzicht' | 'transacties' | 'weekrapport' | 'studieschuld' | 'koersen';
+export type Page =
+  | 'overzicht'
+  | 'transacties'
+  | 'inzicht'
+  | 'race'
+  | 'toekomst'
+  | 'chat'
+  | 'wrapped'
+  | 'weekrapport'
+  | 'studieschuld'
+  | 'koersen';
+
+const PAGES: Page[] = ['transacties', 'inzicht', 'race', 'toekomst', 'chat', 'wrapped', 'weekrapport', 'studieschuld', 'koersen'];
 export interface Route {
   page: Page;
   /** Gevuld op de detailpagina van een aandeel */
@@ -10,10 +22,7 @@ export interface Route {
 function parse(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   if (parts[0] === 'aandeel' && parts[1]) return { page: 'overzicht', ticker: decodeURIComponent(parts[1]) };
-  if (parts[0] === 'transacties') return { page: 'transacties', ticker: null };
-  if (parts[0] === 'weekrapport') return { page: 'weekrapport', ticker: null };
-  if (parts[0] === 'studieschuld') return { page: 'studieschuld', ticker: null };
-  if (parts[0] === 'koersen') return { page: 'koersen', ticker: null };
+  if (PAGES.includes(parts[0] as Page)) return { page: parts[0] as Page, ticker: null };
   return { page: 'overzicht', ticker: null };
 }
 
@@ -27,8 +36,10 @@ export function useHashRoute() {
 
   useEffect(() => {
     const onChange = () => {
-      setRoute(parse(window.location.hash));
-      window.scrollTo({ top: 0 });
+      const next = parse(window.location.hash);
+      setRoute(next);
+      // Wrapped is een laag over de pagina: niet naar boven springen.
+      if (next.page !== 'wrapped') window.scrollTo({ top: 0 });
     };
     window.addEventListener('hashchange', onChange);
     return () => window.removeEventListener('hashchange', onChange);

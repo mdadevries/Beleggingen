@@ -12,6 +12,47 @@ npm install
 npm run dev
 ```
 
+## v3 — de grote upgrade
+
+- **Echte waardegrafiek**: het tabblad *Verloop* rekent nu op echte slotkoersen van elke beursdag
+  (`/api/quotes?history=TICKER`, een dag bewaard). Waar een koershistorie ontbreekt valt hij per aandeel terug
+  op de oude schatting, en de grafiek zegt eerlijk hoeveel procent op echte koersen rust.
+- **Race tegen de markt** (`#/race`): elke euro die je inlegde gaat in een parallelle wereld in de S&P 500,
+  Nasdaq-100, MSCI World of MSCI Europe (accumulerende iShares-ETF's via justETF, in euro's, `?benchmark=`).
+  Zelfde dagen, zelfde bedragen. Met afspeelknop, live klassement, uitslag en een tabel met rendement,
+  grootste dip en schommeling (tijd-gewogen, dus zonder het effect van je bijkopen).
+- **Inzicht** (`#/inzicht`):
+  - *Portefeuillescore* 0-100 met uitleg per onderdeel (één paard, regio's, sectoren, gokjes, basis) en je beleggerstype.
+  - *Waar staat je geld*: verdeling per regio en sector, door je ETF's heen gekeken (afgeronde vaste verdelingen in `src/utils/analysis.ts`).
+  - *Second best*: per aandeel een duel tegen de grootste concurrent (`src/data/peers.ts`): wat als je op dezelfde dagen
+    met dezelfde bedragen de concurrent had gekocht? Koershistorie via `?peer=SYMBOOL` (Twelve Data, Yahoo als reserve) of ISIN (justETF).
+  - *3 ideeën om te onderzoeken*: gekozen uit `src/data/candidates.ts` op wat er in je portefeuille ontbreekt en wat bij
+    je stijl past (AI, winstgevend, minder bekend). Elke reden is uitlegbaar; live kerncijfers via `?symbolfund=` (Finnhub).
+    Bewust geen koopadvies.
+- **Toekomstmachine** (`#/toekomst`): Monte-Carlo-simulatie (1.500 toekomsten) met maandinleg, jaarlijkse verhoging,
+  rendement, schommeling (standaard die van jouw portefeuille), inflatie en een doelbedrag. Waaiergrafiek, mijlpalen
+  en "wat doet €50 per maand extra".
+- **Beleggings-Wrapped** (`#/wrapped`, ✨-knop): Spotify Wrapped-achtig verhaal over je jaar: transacties, MVP,
+  pechvogel, beste timing, trouwste aandeel, jij vs de S&P 500 en je beleggerstype. Delen gaat zonder bedragen.
+- **Chat met je portefeuille** (`#/chat`, `api/chat.ts`): Gemini kent je posities en transacties (de server leest ze
+  zelf uit de database). Standaard ziet de AI **alleen percentages en koersen**; bedragen gaan alleen mee als je het
+  vinkje in de chat aanzet. Daglimiet 200 vragen. In de demo antwoordt de chat met voorbeeldantwoorden.
+- **App op je telefoon**: installeerbaar (manifest + iconen + service worker in `public/`). Onderbalk op de telefoon,
+  "Meer"-menu voor de rest. De service worker bewaart alleen vaste bestanden, nooit pagina's of API-data.
+- **⌘K / Ctrl+K**: snel zoeken naar pagina's, aandelen en acties; tik een vraag en hij gaat naar de chat.
+- Demo-account: alles werkt ook in de demo, met verzonnen (maar steeds dezelfde) koerslijnen.
+
+### Nieuw in te stellen (eenmalig)
+
+| Waar | Wat |
+| --- | --- |
+| Vercel → Environment Variables | `GEMINI_API_KEY` = dezelfde sleutel als in n8n (aistudio.google.com/apikey). Optioneel `GEMINI_MODEL` (standaard `gemini-3.8-flash`, zelfde als het weekrapport). Daarna **Redeploy**. |
+
+Zonder die sleutel werkt alles behalve de chat (die zegt dan netjes wat er mist).
+
+**Als app installeren**: iPhone → open de site in Safari → deelknop → *Zet op beginscherm*.
+Android → Chrome → menu → *App installeren*.
+
 ## Wat er nu in zit (v2 — automatische import)
 
 - **Overzicht**: KPI-rij, verdeling per aandeel (gestapelde balk i.p.v.
@@ -185,11 +226,8 @@ invult (stap 2 hierboven) — die twee moeten exact overeenkomen.
 
 ## Nog niet gebouwd (bewust, voor latere versie)
 
-- Pagina per aandeel (gemiddelde koers, winst/verlies, eigen transacties)
 - Beleggingsdagboek (notitie per transactie)
-- Chatbot voor vragen over transacties
-- Koershistorie: de grafiek 'Waarde door de tijd' blijft een geschat verloop
-  (alleen de huidige koers is echt), geen echte historische koersen
+- Badges en mijlpalen
 
 ## Structuur
 
@@ -202,7 +240,8 @@ src/
                TransactionsTable, TransactionBadge, Nav
 api/
   transactions.ts   GET (lijst, alleen echte sessie) / POST (nieuwe order, x-api-key)
-  quotes.ts         GET live koersen in euro's (alleen echte sessie)
+  quotes.ts         GET live koersen in euro's, plus ?history=, ?benchmark=, ?peer=, ?symbolfund=
+  chat.ts           POST vraag aan Gemini over je portefeuille (alleen echte sessie)
   login.ts          gebruikersnaam + wachtwoord -> sessie-cookie (met blokkade na foute pogingen)
   logout.ts         cookie wissen
 scripts/

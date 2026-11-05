@@ -1,0 +1,22 @@
+{
+  "name": "Beleggingen",
+  "short_name": "Beleggingen",
+  "description": "Mijn beleggingen: overzicht, race tegen de markt, toekomstmachine en AI-chat.",
+  "lang": "nl",
+  "start_url": "/#/overzicht",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f0f11",
+  "theme_color": "#2a78d6",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Inzicht", "url": "/#/inzicht", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Race tegen de markt", "url": "/#/race", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Chat", "url": "/#/chat", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

@@ -13,7 +13,7 @@ const VIEWS: { id: View; label: string; subtitle: string }[] = [
   { id: 'cirkel', label: 'Verdeling', subtitle: 'Je vijf grootste posities in kleur, de rest samen als Overig.' },
   { id: 'rendement', label: 'Rendement', subtitle: 'Winst of verlies per aandeel sinds aankoop, van best naar slechtst.' },
   { id: 'blokken', label: 'Blokken', subtitle: 'Hoe groter het blok, hoe groter je positie. De kleur toont je rendement.' },
-  { id: 'verloop', label: 'Verloop', subtitle: 'Wat je portefeuille waard is ten opzichte van wat je hebt ingelegd (geschat). Beweeg over de grafiek.' },
+  { id: 'verloop', label: 'Verloop', subtitle: 'Wat je portefeuille waard is ten opzichte van wat je hebt ingelegd. Beweeg over de grafiek.' },
 ];
 const STORAGE_KEY = 'beleggingen_view';
 
@@ -32,12 +32,15 @@ interface PortfolioViewsProps {
   totals: PortfolioTotals;
   showInvested: boolean;
   series: SeriesPoint[];
+  /** Welk deel van de waarde op echte dagkoersen rust (0-1); null = nog aan het laden of geschat. */
+  realCoverage: number | null;
+  isDemo?: boolean;
   colors: Record<string, string>;
   onSelectStock: (ticker: string) => void;
 }
 
 /** Eén kaart, vier manieren om naar je portefeuille te kijken. Je keuze wordt onthouden. */
-export const PortfolioViews: React.FC<PortfolioViewsProps> = ({ positions, totals, showInvested, series, colors, onSelectStock }) => {
+export const PortfolioViews: React.FC<PortfolioViewsProps> = ({ positions, totals, showInvested, series, realCoverage, isDemo, colors, onSelectStock }) => {
   const [view, setView] = useState<View>(readView);
   const current = VIEWS.find((v) => v.id === view)!;
 
@@ -71,8 +74,16 @@ export const PortfolioViews: React.FC<PortfolioViewsProps> = ({ positions, total
     </div>
   );
 
+  const sourceNote = isDemo
+    ? 'In de demo met verzonnen dagkoersen.'
+    : realCoverage === null
+      ? 'Geschat verloop (rechte lijn tussen je transactieprijzen). Echte koersen worden geladen…'
+      : realCoverage > 0.98
+        ? 'Op echte slotkoersen van elke beursdag.'
+        : `Op echte slotkoersen voor ${Math.round(realCoverage * 100)}% van je portefeuille; de rest is geschat tussen je transactieprijzen.`;
+
   return (
-    <Card title="Mijn portefeuille" subtitle={current.subtitle}>
+    <Card title="Mijn portefeuille" subtitle={view === 'verloop' ? `${current.subtitle} ${sourceNote}` : current.subtitle}>
       <div className="mb-5">{tabs}</div>
       {view === 'cirkel' && <DonutChart positions={positions} colors={colors} totals={totals} showInvested={showInvested} onSelect={onSelectStock} />}
       {view === 'rendement' && <ReturnBars positions={positions} onSelect={onSelectStock} />}

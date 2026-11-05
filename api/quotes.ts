@@ -893,6 +893,100 @@ async function handleHistory(ticker: string, db: Db, res: VercelResponse) {
   res.status(200).json({ ticker, points, source, updatedAt: new Date(now).toISOString() });
 }
 
+// ---------- Koershistorie van iets dat je NIET hebt: index-ETF's en concurrenten ----------
+//
+// Voor de race tegen de markt (?benchmark=sp500) en de "second best"-duels (?peer=SYMBOOL).
+// Alleen vaste lijsten of een strak symboolformaat: de site kan hier niet willekeurig het
+// internet mee afstruinen. Een ISIN gaat naar justETF (gratis, in euro's), een Amerikaans
+// symbool naar Twelve Data (1 credit) met Yahoo als reserve. Een dag bewaard in quote_cache.
+
+const EXT_PREFIX = 'ext:v1:';
+const BENCHMARK_ISINS: Record<string, string> = {
+  sp500: 'IE00B5BMR087', // iShares Core S&P 500 (Acc)
+  nasdaq: 'IE00B53SZB19', // iShares Nasdaq 100 (Acc)
+  world: 'IE00B4L5Y983', // iShares Core MSCI World (Acc)
+  europe: 'IE00B4K48X80', // iShares Core MSCI Europe (Acc)
+};
+const ISIN_RE = /^[A-Z]{2}[A-Z0-9]{9}\d$/;
+const US_SYMBOL_RE = /^[A-Z]{1,6}$/;
+
+async function tdSymbolHistory(symbol: string) {
+  const data = await tdJson(
+    `/time_series?symbol=${encodeURIComponent(symbol)}&country=United%20States&interval=1day&outputsize=1300&order=asc&dp=4`,
+    8000
+  );
+  const values: any[] = Array.isArray(data?.values) ? data.values : [];
+  const rows = values
+    .map((v) => ({ date: String(v.datetime).slice(0, 10), close: Number.parseFloat(v.close) }))
+    .filter((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.date) && Number.isFinite(r.close) && r.close > 0);
+  const currency = typeof data?.meta?.currency === 'string' ? data.meta.currency : 'USD';
+  if (rows.length < 5) throw new Error('Te weinig koersen in antwoord');
+  return { rows, currency };
+}
+
+async function handleExternalHistory(id: string, db: Db, res: VercelResponse) {
+  const now = Date.now();
+  const key = EXT_PREFIX + id;
+  const cached: any[] = (await db(`/quote_cache?select=body&key=eq.${encodeURIComponent(key)}`).catch(() => null)) ?? [];
+  const hit = cached[0]?.body as { fetchedAt: string; points: Points; source: string } | undefined;
+  if (hit && now - new Date(hit.fetchedAt).getTime() < HISTORY_FRESH_MS) {
+    res.status(200).json({ id, points: hit.points, source: hit.source, updatedAt: hit.fetchedAt });
+    return;
+  }
+
+  const isin = BENCHMARK_ISINS[id] ?? (ISIN_RE.test(id) ? id : null);
+  let points: Points | null = null;
+  let source = '';
+  const errors: string[] = [];
+  let creditsRow: unknown = null;
+
+  if (isin) {
+    try {
+      points = await justetfHistory(isin);
+      source = 'justetf';
+    } catch (e) {
+      errors.push(`justetf: ${errMsg(e)}`);
+    }
+  } else {
+    const credits = await loadCredits(db, now);
+    const budget = makeBudget(credits.left);
+    try {
+      if (!budget.take()) throw new Error('budget op');
+      const r = await tdSymbolHistory(id);
+      points = await toEuroSeries(r.rows, r.currency);
+      source = 'twelvedata';
+    } catch (e) {
+      errors.push(`twelvedata: ${errMsg(e)}`);
+    }
+    creditsRow = credits.row(budget.used());
+    if (!points) {
+      try {
+        const r = await yahooHistory(id);
+        points = await toEuroSeries(r.rows, r.currency);
+        source = 'yahoo';
+      } catch (e) {
+        errors.push(`yahoo: ${errMsg(e)}`);
+      }
+    }
+  }
+
+  const rows: any[] = [];
+  if (creditsRow) rows.push(creditsRow);
+  if (points) {
+    rows.push({ key, body: { fetchedAt: new Date(now).toISOString(), points, source }, expires_at: new Date(now + KEEP_DAYS * 86400_000).toISOString() });
+  }
+  if (rows.length) await db('/quote_cache?on_conflict=key', { method: 'POST', body: rows, prefer: 'resolution=merge-duplicates' }).catch(() => undefined);
+
+  if (!points) {
+    console.log(`[ext-history] ${id}: MISLUKT - ${errors.join('; ')}`);
+    if (hit) res.status(200).json({ id, points: hit.points, source: hit.source, updatedAt: hit.fetchedAt });
+    else res.status(502).json({ error: 'Koershistorie niet beschikbaar.' });
+    return;
+  }
+  console.log(`[ext-history] ${id}: ok via ${source}, ${points.length} dagkoersen`);
+  res.status(200).json({ id, points, source, updatedAt: new Date(now).toISOString() });
+}
+
 // ---------- Kerncijfers (Finnhub, gratis sleutel, alleen Amerikaanse aandelen) ----------
 
 async function finnhub(path: string): Promise<any> {
@@ -910,6 +1004,33 @@ const pct = (v: unknown): number | null => {
   const n = num(v);
   return n === null ? null : n / 100; // Finnhub geeft procenten als 14.2; wij werken met fracties
 };
+
+/** Profiel + kerncijfers bij Finnhub voor een Amerikaans symbool (bedragen omgerekend naar euro's). */
+async function finnhubFundamentals(symbol: string) {
+  const sym = encodeURIComponent(symbol);
+  const [profile, metric] = await Promise.all([finnhub(`/stock/profile2?symbol=${sym}`), finnhub(`/stock/metric?symbol=${sym}&metric=all`)]);
+  const m = metric?.metric ?? {};
+  const usdPerEur = await ecbRate('USD');
+  const mcUsd = num(profile?.marketCapitalization ?? m.marketCapitalization);
+  const data = {
+    available: true,
+    industry: typeof profile?.finnhubIndustry === 'string' && profile.finnhubIndustry ? profile.finnhubIndustry : null,
+    country: typeof profile?.country === 'string' && profile.country ? profile.country : null,
+    ipo: typeof profile?.ipo === 'string' && profile.ipo ? profile.ipo : null,
+    website: typeof profile?.weburl === 'string' && profile.weburl ? profile.weburl : null,
+    marketCapEur: mcUsd !== null && mcUsd > 0 ? (mcUsd * 1e6) / usdPerEur : null,
+    pe: num(m.peTTM ?? m.peBasicExclExtraTTM),
+    pb: num(m.pbQuarterly ?? m.pbAnnual),
+    ps: num(m.psTTM),
+    beta: num(m.beta),
+    dividendYield: pct(m.currentDividendYieldTTM ?? m.dividendYieldIndicatedAnnual),
+    grossMargin: pct(m.grossMarginTTM),
+    netMargin: pct(m.netProfitMarginTTM),
+    roe: pct(m.roeTTM),
+    revenueGrowth: pct(m.revenueGrowthTTMYoy),
+  };
+  return data;
+}
 
 async function handleFundamentals(ticker: string, db: Db, res: VercelResponse) {
   const now = Date.now();
@@ -931,28 +1052,7 @@ async function handleFundamentals(ticker: string, db: Db, res: VercelResponse) {
     return;
   }
   try {
-    const sym = encodeURIComponent(quote.symbol.split(':')[0]);
-    const [profile, metric] = await Promise.all([finnhub(`/stock/profile2?symbol=${sym}`), finnhub(`/stock/metric?symbol=${sym}&metric=all`)]);
-    const m = metric?.metric ?? {};
-    const usdPerEur = await ecbRate('USD');
-    const mcUsd = num(profile?.marketCapitalization ?? m.marketCapitalization);
-    const data = {
-      available: true,
-      industry: typeof profile?.finnhubIndustry === 'string' && profile.finnhubIndustry ? profile.finnhubIndustry : null,
-      country: typeof profile?.country === 'string' && profile.country ? profile.country : null,
-      ipo: typeof profile?.ipo === 'string' && profile.ipo ? profile.ipo : null,
-      website: typeof profile?.weburl === 'string' && profile.weburl ? profile.weburl : null,
-      marketCapEur: mcUsd !== null && mcUsd > 0 ? (mcUsd * 1e6) / usdPerEur : null,
-      pe: num(m.peTTM ?? m.peBasicExclExtraTTM),
-      pb: num(m.pbQuarterly ?? m.pbAnnual),
-      ps: num(m.psTTM),
-      beta: num(m.beta),
-      dividendYield: pct(m.currentDividendYieldTTM ?? m.dividendYieldIndicatedAnnual),
-      grossMargin: pct(m.grossMarginTTM),
-      netMargin: pct(m.netProfitMarginTTM),
-      roe: pct(m.roeTTM),
-      revenueGrowth: pct(m.revenueGrowthTTMYoy),
-    };
+    const data = await finnhubFundamentals(quote.symbol.split(':')[0]);
     await db('/quote_cache?on_conflict=key', {
       method: 'POST',
       body: [{ key: FUND_PREFIX + ticker, body: { fetchedAt: new Date(now).toISOString(), data }, expires_at: new Date(now + KEEP_DAYS * 86400_000).toISOString() }],
@@ -963,6 +1063,35 @@ async function handleFundamentals(ticker: string, db: Db, res: VercelResponse) {
   } catch (e) {
     console.log(`[fundamentals] ${ticker}: MISLUKT - ${errMsg(e)}`);
     res.status(200).json({ available: false, reason: 'failed' });
+  }
+}
+
+/** Kerncijfers van een aandeel dat je (nog) niet hebt: voor de duels en de ideeën om te onderzoeken. */
+async function handleSymbolFundamentals(symbol: string, db: Db, res: VercelResponse) {
+  const now = Date.now();
+  const key = FUND_PREFIX + 'sym:' + symbol;
+  const cached: any[] = (await db(`/quote_cache?select=body&key=eq.${encodeURIComponent(key)}`).catch(() => null)) ?? [];
+  const hit = cached[0]?.body as { fetchedAt: string; data: unknown } | undefined;
+  if (hit && now - new Date(hit.fetchedAt).getTime() < FUND_FRESH_MS) {
+    res.status(200).json(hit.data);
+    return;
+  }
+  if (!process.env.FINNHUB_API_KEY) {
+    res.status(200).json({ available: false, reason: 'no-key' });
+    return;
+  }
+  try {
+    const data = await finnhubFundamentals(symbol);
+    await db('/quote_cache?on_conflict=key', {
+      method: 'POST',
+      body: [{ key, body: { fetchedAt: new Date(now).toISOString(), data }, expires_at: new Date(now + KEEP_DAYS * 86400_000).toISOString() }],
+      prefer: 'resolution=merge-duplicates',
+    }).catch(() => undefined);
+    res.status(200).json(data);
+  } catch (e) {
+    console.log(`[fundamentals] ${symbol}: MISLUKT - ${errMsg(e)}`);
+    if (hit) res.status(200).json(hit.data);
+    else res.status(200).json({ available: false, reason: 'failed' });
   }
 }
 
@@ -1003,6 +1132,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (h) return await handleHistory(h, db, res);
       const f = tickerParam(q('fundamentals'));
       if (f) return await handleFundamentals(f, db, res);
+      const b = q('benchmark');
+      if (b && Object.prototype.hasOwnProperty.call(BENCHMARK_ISINS, b)) return await handleExternalHistory(b, db, res);
+      const peer = (q('peer') ?? '').toUpperCase();
+      if (peer && (ISIN_RE.test(peer) || US_SYMBOL_RE.test(peer))) return await handleExternalHistory(peer, db, res);
+      const pf = (q('symbolfund') ?? '').toUpperCase();
+      if (pf && US_SYMBOL_RE.test(pf)) return await handleSymbolFundamentals(pf, db, res);
       if (isN8n) {
         // n8n mag alleen historie/kerncijfers vullen, nooit de hele koersronde starten.
         res.status(400).json({ error: 'Geef ?history=TICKER of ?fundamentals=TICKER mee.' });

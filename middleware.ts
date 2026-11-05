@@ -2,8 +2,11 @@
 // wachtwoord), want er staat eigen (financiële) beleggingsdata in. /api/* loopt er
 // niet doorheen — die routes hebben hun eigen auth (login zelf, x-api-key voor n8n).
 
+// Uitgezonderd: /api (eigen auth) en de bestanden die je telefoon nodig heeft om de site als app te
+// installeren (manifest, service worker, iconen). Daar staat niets persoonlijks in, en de telefoon
+// vraagt ze op zonder je login-cookie.
 export const config = {
-  matcher: '/((?!api/).*)',
+  matcher: '/((?!api/|manifest\\.webmanifest|sw\\.js|icons/).*)',
 };
 
 // Houd deze constanten gelijk aan api/login.ts en de andere /api-bestanden.
