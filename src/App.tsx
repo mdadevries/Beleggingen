@@ -30,6 +30,7 @@ import { WrappedStory } from './components/WrappedStory.tsx';
 import { CommandPalette } from './components/CommandPalette.tsx';
 import { Spotlight } from './components/Spotlight.tsx';
 import { computeExposure, healthScore } from './utils/analysis.ts';
+import { AccountPage } from './components/AccountPage.tsx';
 
 export default function App() {
   const { route, goPage, goStock } = useHashRoute();
@@ -171,6 +172,8 @@ export default function App() {
           <FuturePage currentValue={totals.totalValue} myVolatility={myVolatility} />
         ) : basePage === 'chat' ? (
           <ChatPage isDemo={isDemo} positions={positions} />
+        ) : basePage === 'account' ? (
+          <AccountPage isDemo={isDemo} />
         ) : basePage === 'weekrapport' ? (
           <WeeklyReportPage isDemo={isDemo} onSelectStock={goStock} />
         ) : basePage === 'studieschuld' ? (

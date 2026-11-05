@@ -21,6 +21,7 @@ import {
   MoreHorizontal,
   ChevronDown,
   X,
+  UserRound,
 } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme.ts';
 import { usePrivacy } from '../hooks/usePrivacy.tsx';
@@ -61,6 +62,7 @@ export const NAV_ITEMS: Record<Page, Item> = {
   weekrapport: { id: 'weekrapport', label: 'Weekrapport', icon: <FileText className={ic} aria-hidden="true" /> },
   studieschuld: { id: 'studieschuld', label: 'Studieschuld', icon: <GraduationCap className={ic} aria-hidden="true" /> },
   koersen: { id: 'koersen', label: 'Koersen', icon: <Activity className={ic} aria-hidden="true" /> },
+  account: { id: 'account', label: 'Account', icon: <UserRound className={ic} aria-hidden="true" /> },
 };
 
 export const Nav: React.FC<NavProps> = ({ page, onNavigate, isDemo, demoReason, onOpenSearch }) => {
@@ -86,9 +88,9 @@ export const Nav: React.FC<NavProps> = ({ page, onNavigate, isDemo, demoReason, 
   }, [moreOpen]);
 
   const primary: Page[] = ['overzicht', 'transacties', 'inzicht', 'race', 'toekomst', 'chat'];
-  const more: Page[] = ['weekrapport', 'studieschuld', ...(isDemo ? (['koersen'] as Page[]) : [])];
+  const more: Page[] = ['weekrapport', 'studieschuld', 'account', ...(isDemo ? (['koersen'] as Page[]) : [])];
   const mobileTabs: Page[] = ['overzicht', 'transacties', 'inzicht', 'chat'];
-  const mobileMore: Page[] = ['race', 'toekomst', 'wrapped', 'weekrapport', 'studieschuld', ...(isDemo ? (['koersen'] as Page[]) : [])];
+  const mobileMore: Page[] = ['race', 'toekomst', 'wrapped', 'weekrapport', 'studieschuld', 'account', ...(isDemo ? (['koersen'] as Page[]) : [])];
   const go = (p: Page) => {
     setMoreOpen(false);
     setSheetOpen(false);

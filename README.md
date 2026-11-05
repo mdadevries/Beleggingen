@@ -12,6 +12,23 @@ npm install
 npm run dev
 ```
 
+## Account, wachtwoord vergeten en Face ID
+
+- **Nieuw inlogscherm**: strakker, licht en donker, met *Inloggen met Face ID*, *Wachtwoord vergeten?* en installeerbaar als app.
+- **Wachtwoord vergeten**: knop op het inlogscherm → mail met een eenmalige link (30 minuten geldig) naar `ALERT_EMAIL`,
+  inclusief je gebruikersnaam. De link opent `/reset` (token staat achter het `#`, dus nooit in serverlogs) met een
+  sterkte-meter. Hooguit 3 aanvragen per uur.
+- **Face ID / Touch ID** (passkeys, WebAuthn): instellen op de pagina **Account** (`#/account`), per apparaat. Daarna verschijnt
+  de Face ID-knop op het inlogscherm.
+- **Wachtwoord wijzigen** in de site zelf (Account).
+- **Mail bij elke nieuwe login** met tijd, apparaat en plek (aan/uit op Account), plus een mail bij elke wachtwoordwijziging.
+- Opslag in de bestaande tabel `quote_cache` (sleutels `auth:*`), dus geen nieuwe SQL nodig. Een wachtwoord uit de site gaat
+  vóór `SITE_PASSWORD_HASH`/`SITE_PASSWORD`. Terug naar het Vercel-wachtwoord: verwijder in Supabase de rij `auth:password`.
+
+**Mail instellen (eenmalig, gratis):** maak een account op resend.com **met je eigen Gmail-adres**, maak een API key, en zet in
+Vercel `RESEND_API_KEY` (die sleutel) en `ALERT_EMAIL` (je Gmail). Redeploy. Zonder eigen domein verstuurt Resend vanaf
+`onboarding@resend.dev`, en dat mag alleen naar het adres van je Resend-account, precies wat hier nodig is.
+
 ## v3 — de grote upgrade
 
 - **Echte waardegrafiek**: het tabblad *Verloop* rekent nu op echte slotkoersen van elke beursdag
@@ -242,6 +259,7 @@ api/
   transactions.ts   GET (lijst, alleen echte sessie) / POST (nieuwe order, x-api-key)
   quotes.ts         GET live koersen in euro's, plus ?history=, ?benchmark=, ?peer=, ?symbolfund=
   chat.ts           POST vraag aan Gemini over je portefeuille (alleen echte sessie)
+  account.ts        wachtwoord vergeten/wijzigen, Face ID (passkeys), inlogmeldingen
   login.ts          gebruikersnaam + wachtwoord -> sessie-cookie (met blokkade na foute pogingen)
   logout.ts         cookie wissen
 scripts/

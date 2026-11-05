@@ -10,9 +10,10 @@ export type Page =
   | 'wrapped'
   | 'weekrapport'
   | 'studieschuld'
-  | 'koersen';
+  | 'koersen'
+  | 'account';
 
-const PAGES: Page[] = ['transacties', 'inzicht', 'race', 'toekomst', 'chat', 'wrapped', 'weekrapport', 'studieschuld', 'koersen'];
+const PAGES: Page[] = ['transacties', 'inzicht', 'race', 'toekomst', 'chat', 'wrapped', 'weekrapport', 'studieschuld', 'koersen', 'account'];
 export interface Route {
   page: Page;
   /** Gevuld op de detailpagina van een aandeel */

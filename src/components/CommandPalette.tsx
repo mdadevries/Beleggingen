@@ -44,13 +44,14 @@ export const CommandPalette: React.FC<Props> = ({ open, onClose, positions, isDe
   }, [open]);
 
   const entries: Entry[] = useMemo(() => {
-    const pages: Page[] = ['overzicht', 'transacties', 'inzicht', 'race', 'toekomst', 'chat', 'wrapped', 'weekrapport', 'studieschuld', ...(isDemo ? (['koersen'] as Page[]) : [])];
+    const pages: Page[] = ['overzicht', 'transacties', 'inzicht', 'race', 'toekomst', 'chat', 'wrapped', 'weekrapport', 'studieschuld', 'account', ...(isDemo ? (['koersen'] as Page[]) : [])];
     const extra: Record<string, string> = {
       inzicht: 'analyse score spreiding concurrent second best ideeen duels',
       race: 'markt index sp500 s&p nasdaq benchmark',
       toekomst: 'simulator monte carlo toekomstmachine pensioen doel',
       chat: 'ai vraag gemini assistent',
       wrapped: 'jaaroverzicht story spotify',
+      account: 'wachtwoord face id passkey beveiliging instellingen app installeren meldingen',
     };
     return [
       ...pages.map((p) => ({

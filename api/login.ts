@@ -44,8 +44,17 @@ function sameText(a: string, b: string): boolean {
   return crypto.timingSafeEqual(sha256(a), sha256(b));
 }
 
-async function verifyPassword(input: string): Promise<boolean> {
-  const stored = process.env.SITE_PASSWORD_HASH?.trim();
+async function verifyPassword(input: string, db: Db | null): Promise<boolean> {
+  // Een wachtwoord dat je in de site hebt ingesteld (reset of wijzigen, zie api/account.ts) gaat voor.
+  let stored = process.env.SITE_PASSWORD_HASH?.trim();
+  if (db) {
+    try {
+      const rows: any[] = (await db(`/quote_cache?select=body&key=eq.${encodeURIComponent('auth:password')}`)) ?? [];
+      if (typeof rows[0]?.body?.hash === 'string') stored = rows[0].body.hash;
+    } catch (err) {
+      console.error('[login] wachtwoord uit database lezen mislukt:', (err as Error).message);
+    }
+  }
   if (stored) {
     // Formaat: scrypt:N:r:p:zout:hash (zout en hash in base64url)
     const [scheme, n, r, p, salt, hash] = stored.split(':');
@@ -67,6 +76,46 @@ async function verifyPassword(input: string): Promise<boolean> {
   }
   const plain = process.env.SITE_PASSWORD;
   return !!plain && sameText(input, plain);
+}
+
+// ---- Mail bij een nieuwe login (Resend; zelfde opzet als api/account.ts) ----
+
+async function loginAlert(db: Db | null, req: VercelRequest): Promise<void> {
+  const key = process.env.RESEND_API_KEY;
+  const to = process.env.ALERT_EMAIL;
+  if (!key || !to) return;
+  try {
+    if (db) {
+      const rows: any[] = (await db(`/quote_cache?select=body&key=eq.${encodeURIComponent('auth:settings')}`)) ?? [];
+      if (rows[0]?.body?.loginAlerts === false) return;
+    }
+    const ua = String(req.headers['user-agent'] ?? '');
+    const device = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Mac OS X/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : 'onbekend apparaat';
+    const dec = (v: unknown) => {
+      try {
+        return v ? decodeURIComponent(String(v)) : '';
+      } catch {
+        return '';
+      }
+    };
+    const place = [dec(req.headers['x-vercel-ip-city']), dec(req.headers['x-vercel-ip-country'])].filter(Boolean).join(', ') || 'onbekende plek';
+    const when = new Intl.DateTimeFormat('nl-NL', { dateStyle: 'full', timeStyle: 'short', timeZone: 'Europe/Amsterdam' }).format(new Date());
+    const site = `https://${String(req.headers['x-forwarded-host'] || req.headers.host)}`;
+    const html = `<!doctype html><html><body style="margin:0;background:#f4f4f5;font-family:-apple-system,Segoe UI,Inter,sans-serif;padding:24px">
+<div style="max-width:480px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #e4e4e7">
+<div style="background:linear-gradient(135deg,#2a78d6,#8b5cf6);padding:20px 24px;color:#fff;font-weight:700">📈 Beleggingen</div>
+<div style="padding:24px;color:#1f2937;font-size:15px;line-height:1.55"><h1 style="font-size:20px;margin:0 0 12px">Er is net ingelogd</h1>
+<p>${when}<br>Met je <b>wachtwoord</b> op een <b>${device}</b> (${place}).</p>
+<p>Was jij dit niet? <a href="${site}/reset" style="color:#2a78d6;font-weight:600">Stel meteen een nieuw wachtwoord in</a>.</p></div></div></body></html>`;
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: process.env.RESEND_FROM || 'Beleggingen <onboarding@resend.dev>', to: [to], subject: `Nieuwe login op je beleggingssite (${device})`, html }),
+      signal: AbortSignal.timeout(4000),
+    });
+  } catch (err) {
+    console.error('[login] inlogmelding mislukt:', (err as Error).message);
+  }
 }
 
 // ---- Poging-teller (tegen gokken) ----
@@ -243,7 +292,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     // Altijd allebei controleren, ook als de gebruikersnaam al fout is.
     const userOk = sameText(username.trim().toLowerCase(), siteUsername.trim().toLowerCase());
-    const passOk = await verifyPassword(password.normalize('NFKC'));
+    const passOk = await verifyPassword(password.normalize('NFKC'), db);
 
     if (userOk && passOk) {
       await clearAttempts(db, key);
@@ -251,6 +300,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'Set-Cookie',
         `${AUTH_COOKIE}=${signSession(sessionSecret, 'real')}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_DAYS * 86_400}`
       );
+      await loginAlert(db, req);
       res.status(200).json({ ok: true });
       return;
     }

@@ -12,6 +12,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>
 );
 
+// Android/Chrome biedt de installatie één keer aan: bewaar dat moment voor de knop op de Account-pagina.
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  (window as unknown as { __installPrompt?: Event }).__installPrompt = e;
+});
+
 // Service worker: maakt de site installeerbaar als app (zie public/sw.js). Alleen in de echte build.
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
